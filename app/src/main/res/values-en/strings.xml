@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sokhan</string>
+    <string name="accessibility_description">Sokhan: on-screen lips button that turns speech into text in any app</string>
+
+    <string name="subtitle">Speech to text</string>
+    <string name="access_status_on">Accessibility service is enabled</string>
+    <string name="access_status_off">Accessibility service is disabled</string>
+    <string name="open_access_settings">Open accessibility settings</string>
+    <string name="access_hint">Enable "Sokhan" in accessibility settings to show the lips button.</string>
+
+    <string name="language_title">Recognition language</string>
+
+    <string name="guide_title">Guide</string>
+    <string name="guide_steps">1. Enable the accessibility service.\n2. The lips button appears on screen; drag it anywhere.\n3. Wherever you would type, tap it and speak.\n4. Tap again to stop; the text is typed automatically.</string>
+
+    <string name="last_result">Last result</string>
+    <string name="state_recording">Recording… tap the lips button to finish</string>
+    <string name="state_transcribing">Transcribing…</string>
+
+    <string name="rec_notif_title">Sokhan is recording</string>
+    <string name="rec_notif_text">Tap the lips button to stop recording</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_cancel">Cancel</string>
+
+    <string name="insert_failed">Text copied to clipboard; paste it where you type</string>
+    <string name="record_failed">Transcription failed: %1$s</string>
+    <string name="max_duration">Maximum recording length reached</string>
+    <string name="mic_needed">Microphone permission is required</string>
+    <string name="no_service">Accessibility service is not enabled</string>
+    <string name="empty_result">No speech was heard</string>
+</resources>
