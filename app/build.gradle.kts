@@ -45,9 +45,10 @@ android {
     }
 
     applicationVariants.all {
+        val variant = this
         outputs.all {
             (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
-                .outputFileName = "Sokhan-$versionName.apk"
+                .outputFileName = "Sokhan-${variant.versionName}.apk"
         }
     }
 }
