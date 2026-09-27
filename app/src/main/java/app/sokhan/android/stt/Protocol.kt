@@ -49,7 +49,9 @@ private const val HEX_DIGITS = "0123456789ABCDEF"
 private fun hexUpper(value: Long, digits: Int): String {
     val out = CharArray(digits)
     for (i in digits - 1 downTo 0) {
-        out[i] = HEX_DIGITS[((value shr (4 * i)) and 0xF).toInt()]
+        // i counts nibbles from the least significant; the rightmost char is
+        // at index digits-1.
+        out[digits - 1 - i] = HEX_DIGITS[((value shr (4 * i)) and 0xF).toInt()]
     }
     return String(out)
 }
