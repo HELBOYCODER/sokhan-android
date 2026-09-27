@@ -37,6 +37,7 @@ class SokhanAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Job() + Dispatchers.Main)
     private val handler = Handler(Looper.getMainLooper())
     private var overlay: ImageView? = null
+    private var indicator: android.animation.ValueAnimator? = null
     private var windowManager: WindowManager? = null
 
     override fun onServiceConnected() {
@@ -126,6 +127,7 @@ class SokhanAccessibilityService : AccessibilityService() {
 
         serviceScope.launch {
             SessionManager.state.collect { state ->
+                indicator?.cancel()
                 img.setImageResource(
                     when (state) {
                         SessionManager.State.Idle -> R.drawable.overlay_idle
@@ -133,6 +135,14 @@ class SokhanAccessibilityService : AccessibilityService() {
                         SessionManager.State.Transcribing -> R.drawable.overlay_transcribing
                     }
                 )
+                img.scaleX = 1f; img.scaleY = 1f; img.rotation = 0f
+                // Match the desktop rhythm: 1.9 s listening pulse (sdot-pulse),
+                // 0.7 s linear spin while the request is in flight (sspin).
+                indicator = when (state) {
+                    SessionManager.State.Recording -> pulse(img, 1900L)
+                    SessionManager.State.Transcribing -> spin(img, 700L)
+                    SessionManager.State.Idle -> null
+                }
             }
         }
 
@@ -140,7 +150,34 @@ class SokhanAccessibilityService : AccessibilityService() {
         overlay = img
     }
 
+    /** Scale "breathing" used for the listening state. */
+    private fun pulse(view: android.view.View, periodMs: Long): android.animation.ValueAnimator {
+        val a = android.animation.ValueAnimator.ofFloat(1f, 1.12f, 1f)
+        a.duration = periodMs
+        a.repeatMode = android.animation.ValueAnimator.RESTART
+        a.repeatCount = android.animation.ValueAnimator.INFINITE
+        a.interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+        a.addUpdateListener {
+            view.scaleX = it.animatedValue as Float
+            view.scaleY = it.animatedValue as Float
+        }
+        a.start()
+        return a
+    }
+
+    private fun spin(view: android.view.View, periodMs: Long): android.animation.ValueAnimator {
+        val a = android.animation.ValueAnimator.ofFloat(0f, 360f)
+        a.duration = periodMs
+        a.repeatCount = android.animation.ValueAnimator.INFINITE
+        a.interpolator = android.view.animation.LinearInterpolator()
+        a.addUpdateListener { view.rotation = it.animatedValue as Float }
+        a.start()
+        return a
+    }
+
     private fun removeOverlay() {
+        indicator?.cancel()
+        indicator = null
         overlay?.let { windowManager?.removeView(it) }
         overlay = null
     }
