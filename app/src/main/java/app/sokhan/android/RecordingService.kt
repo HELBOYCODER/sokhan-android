@@ -141,7 +141,15 @@ class RecordingService : Service() {
             record.startRecording()
             session.start()
             liveSession = session
-            captions = scope.launch { session.liveText.collect { SessionManager.setLiveText(it) } }
+            LiveTyper.reset()
+            captions = scope.launch {
+                session.liveText.collect {
+                    SessionManager.setLiveText(it)
+                    // Type into the field as it is recognized while Sokhan is the
+                    // active keyboard; the overlay caption updates in parallel.
+                    LiveTyper.update(it)
+                }
+            }
             val buffer = ShortArray(1_600) // 100 ms
             while (!stopRequested && total < MAX_SAMPLES) {
                 val n = record.read(buffer, 0, buffer.size)
@@ -198,11 +206,31 @@ class RecordingService : Service() {
             showToast(getString(R.string.empty_result))
             SessionManager.finishWith(null)
         } else {
-            val inserted = SokhanAccessibilityService.instance?.insertText(text) ?: false
-            if (!inserted) showToast(getString(R.string.insert_failed))
+            insertFinal(text)
             SessionManager.finishWith(text)
         }
         stopSelf()
+    }
+
+    /**
+     * Get the transcript into the field. If Sokhan was the active keyboard the
+     * text was already typed live word-by-word; otherwise commit it through the
+     * input connection in one shot, falling back to the accessibility paste.
+     */
+    private fun insertFinal(text: String) {
+        if (LiveTyper.isFullyTyped(text)) return
+        val typed = LiveTyper.finish(text)
+        if (typed == text) return
+        val ime = SokhanInputMethod.instance
+        val ok = if (ime != null && ime.imeReady) {
+            ime.pasteViaConnection(text)
+        } else {
+            false
+        }
+        if (!ok) {
+            val inserted = SokhanAccessibilityService.instance?.insertText(text) ?: false
+            if (!inserted) showToast(getString(R.string.insert_failed))
+        }
     }
 
     /** Convert one block to f32, publish its mic level, and push it to the live session. */

@@ -1,6 +1,7 @@
 package app.sokhan.android
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -102,6 +103,8 @@ fun SokhanScreen() {
 
             AccessibilityCard()
             Spacer(Modifier.height(14.dp))
+            ImeCard()
+            Spacer(Modifier.height(14.dp))
             LanguageCard()
             Spacer(Modifier.height(14.dp))
             StatusCard()
@@ -192,6 +195,35 @@ private fun AccessibilityCard() {
         ) { Text("تنظیمات دسترسی‌پذیری") }
     }
 }
+
+@Composable
+private fun ImeCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var enabled by remember { mutableStateOf(isImeEnabled(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { enabled = isImeEnabled(context) }
+    SokhanCard("صفحه‌کلید سخن (تایپ زنده)") {
+        Text(
+            if (enabled) "صفحه‌کلید افزوده شده — آن را انتخاب کنید تا متن همان لحظه تایپ شود"
+            else "برای تایپ لحظه‌ای مثل Google Keyboard، «سخن» را از فهرست صفحه‌کلیدها فعال کنید",
+            color = if (enabled) Teal else TextMain, fontSize = 14.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = {
+                context.startActivity(
+                    android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = OnPink)
+        ) { Text("تنظیمات صفحه‌کلید") }
+    }
+}
+
+private fun isImeEnabled(context: Context): Boolean =
+    android.provider.Settings.Secure.getString(
+        context.contentResolver, "enabled_input_methods"
+    )?.contains("app.sokhan.android/.SokhanInputMethod") == true
 
 @Composable
 private fun LanguageCard() {

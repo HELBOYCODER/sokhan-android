@@ -30,4 +30,13 @@
     <string name="no_service">Accessibility service is not enabled</string>
     <string name="no_field">No text field here — tap into a text box first</string>
     <string name="empty_result">No speech was heard</string>
+
+    <string name="ime_label">Sokhan — dictation</string>
+    <string name="ime_listen">🎤 Listen</string>
+    <string name="ime_stop">⏹ Stop</string>
+    <string name="ime_working">Transcribing…</string>
+    <string name="ime_card_title">Sokhan keyboard (live typing)</string>
+    <string name="ime_status_on">Sokhan keyboard is active — text is typed instantly</string>
+    <string name="ime_status_off">To type live, choose "Sokhan" from the keyboards list</string>
+    <string name="ime_open_settings">Keyboard settings</string>
 </resources>

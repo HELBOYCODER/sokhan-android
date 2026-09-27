@@ -105,22 +105,27 @@ object SessionManager {
     }
 
     private fun start(context: Context) {
-        // Refuse before capturing any audio when there is nowhere to type: the
-        // button should simply do nothing outside a text field.
-        val service = SokhanAccessibilityService.instance
-        if (service == null) {
-            toast(context, R.string.no_service)
-            return
-        }
-        // Without RECORD_AUDIO the recorder fails to initialise and the button
-        // looks dead; say so instead of capturing audio that cannot be transcribed.
+        // Without RECORD_AUDIO the recorder cannot initialise and the button just
+        // looks dead; say so up front rather than failing deep inside AudioRecord.
         if (!hasMicrophonePermission(context)) {
             toast(context, R.string.mic_needed)
             return
         }
-        if (!service.hasPasteTarget()) {
-            toast(context, R.string.no_field)
-            return
+        // Refuse before capturing any audio when there is nowhere to type. Either
+        // route counts: the active keyboard (live typing) or a paste-capable field.
+        val service = SokhanAccessibilityService.instance
+        val canTypeLive = LiveTyper.imeAvailable()
+        if (!canTypeLive) {
+            when {
+                service == null -> {
+                    toast(context, R.string.no_service)
+                    return
+                }
+                !service.hasPasteTarget() -> {
+                    toast(context, R.string.no_field)
+                    return
+                }
+            }
         }
         if (tryStart(context)) return
         // Background FGS start blocked (our service is system-bound, so this is

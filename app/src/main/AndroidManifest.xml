@@ -39,6 +39,19 @@
         </service>
 
         <service
+            android:name=".SokhanInputMethod"
+            android:exported="true"
+            android:label="@string/ime_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
+        <service
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
