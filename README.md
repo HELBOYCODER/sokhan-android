@@ -29,6 +29,9 @@ API keys, no local models.
 ## Notes / نکته‌ها
 
 - Languages: فارسی (default), English, العربية, Türkçe — changeable in the app.
+- Persian half-space (ZWNJ) is applied to dictated Persian — می شود → می‌شود,
+  کتاب ها → کتاب‌ها, سخت تر → سخت‌تر. On by default; switch it in the app.
+- The button remembers the position you dragged it to, across reboots.
 - Recording is held fully in memory; long continuous dictation is split only
   at genuinely quiet points (50 s preferred, 120 s hard ceiling), so words are
   never cut mid-stream — the same engine semantics as the desktop app.
@@ -37,6 +40,9 @@ API keys, no local models.
 - Requires Android 8.0+ (API 26).
 
 - زبان‌ها: فارسی (پیش‌فرض)، انگلیسی، عربی، ترکی — از داخل برنامه تغییر کنید.
+- نیم‌فاصله فارسی روی گفتار اعمال می‌شود: می شود ← می‌شود، کتاب ها ← کتاب‌ها،
+  سخت تر ← سخت‌تر. پیش‌فرض روشن است؛ از داخل برنامه خاموشش کنید.
+- دکمه لب جایی که کشیده‌اید را به‌یاد می‌سپارد، حتی بعد از خاموش/روشن کردن گوشی.
 - صدای ضبط‌شده کامل در حافظه نگه داشته می‌شود؛ گفتار پیوسته‌ی طولانی فقط در
   نقاط ساکت تقسیم می‌شود (سقف نرم ۵۰ ثانیه، سقف سخت ۱۲۰ ثانیه)، پس هیچ
   کلمه‌ای نصف نمی‌شود — همان رفتار نسخه دسکتاپ.
