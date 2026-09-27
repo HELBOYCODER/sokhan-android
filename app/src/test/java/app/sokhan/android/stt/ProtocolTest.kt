@@ -6,10 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProtocolTest {
-    /** tag(field, wire) + payload length + bytes, the repeated framing pattern. */
+    /** tag(field, wire=2) + payload length + concatenated bytes. */
     private fun lengthDelimited(fieldNo: Int, vararg payload: ByteArray): ByteArray {
-        val len = payload.sumOf { it.size }
-        return byteArrayOf(((fieldNo shl 3) or 2).toByte(), len.toByte()) + payload.flatten().toByteArray()
+        val total = payload.sumOf { it.size }
+        val out = java.io.ByteArrayOutputStream()
+        out.write((fieldNo shl 3) or 2)
+        out.write(total)
+        payload.forEach { out.write(it) }
+        return out.toByteArray()
     }
 
     @Test

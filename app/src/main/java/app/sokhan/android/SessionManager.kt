@@ -13,6 +13,10 @@ object SessionManager {
         object Transcribing : State()
     }
 
+    private const val PREFS = "sokhan"
+    private const val KEY_LANGUAGE = "language"
+    private const val DEFAULT_LANGUAGE = "fa-IR"
+
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
 
@@ -22,18 +26,19 @@ object SessionManager {
     /** Set when an FGS start was blocked and must be retried from the foreground UI. */
     @Volatile var pendingStart: Boolean = false
 
-    var language: String = "fa-IR"
+    var language: String = DEFAULT_LANGUAGE
 
     fun loadPrefs(context: Context) {
-        val prefs = context.getSharedPreferences("sokhan", Context.MODE_PRIVATE)
-        language = prefs.getString("language", "fa-IR") ?: "fa-IR"
+        language = prefs(context).getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
     }
 
     fun setLanguage(context: Context, value: String) {
         language = value
-        context.getSharedPreferences("sokhan", Context.MODE_PRIVATE)
-            .edit().putString("language", value).apply()
+        prefs(context).edit().putString(KEY_LANGUAGE, value).apply()
     }
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun toggle(context: Context) {
         when (_state.value) {
@@ -43,33 +48,34 @@ object SessionManager {
         }
     }
 
-    private fun start(context: Context) {
+    private fun tryStart(context: Context): Boolean {
+        if (_state.value != State.Idle) return false
         _state.value = State.Recording
-        try {
+        return try {
             context.startForegroundService(Intent(context, RecordingService::class.java))
-        } catch (e: Exception) {
-            // Background FGS start blocked (rare: our service is system-bound,
-            // but some OEMs differ) — retry from the foreground UI.
-            pendingStart = true
+            true
+        } catch (_: Exception) {
             _state.value = State.Idle
-            context.startActivity(
-                Intent(context, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
+            false
         }
+    }
+
+    private fun start(context: Context) {
+        if (tryStart(context)) return
+        // Background FGS start blocked (our service is system-bound, so this is
+        // rare, but some OEMs differ) — retry from the foreground UI.
+        pendingStart = true
+        context.startActivity(
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 
     /** Called from MainActivity.onResume when a blocked start needs a foreground retry. */
     fun retryStartFromForeground(context: Context) {
         if (!pendingStart) return
         pendingStart = false
-        if (_state.value != State.Idle) return
-        _state.value = State.Recording
-        try {
-            context.startForegroundService(Intent(context, RecordingService::class.java))
-        } catch (_: Exception) {
-            _state.value = State.Idle
-        }
+        tryStart(context)
     }
 
     internal fun setTranscribing() {
