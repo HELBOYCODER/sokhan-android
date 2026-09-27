@@ -76,7 +76,9 @@ class RecordingService : Service() {
         instance = this
         stopRequested = false
         cancelled = false
-        if (audioJob == null) audioJob = scope.launch { recordAndTranscribe() }
+        // isActive, not null: a finished job is still non-null until onDestroy,
+        // and treating that as "already recording" wedges the button in Recording.
+        if (audioJob?.isActive != true) audioJob = scope.launch { recordAndTranscribe() }
         return START_NOT_STICKY
     }
 

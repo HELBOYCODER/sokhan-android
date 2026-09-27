@@ -146,16 +146,15 @@ class SokhanAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Type `text` into the focused editable field. Returns false when no
-     * editable target was found — the transcript is left on the clipboard.
+     * Type `text` into the field that can accept a paste. Returns false when no
+     * target was found — the transcript is left on the clipboard.
      */
     fun insertText(text: String): Boolean {
         val cm = getSystemService(ClipboardManager::class.java)
         val previous = cm.primaryClip
         cm.setPrimaryClip(ClipData.newPlainText("sokhan", text))
 
-        val root = rootInActiveWindow
-        val target = root?.let { findEditable(it) }
+        val target = pasteTarget()
         val ok = target?.performAction(AccessibilityNodeInfo.ACTION_PASTE) ?: false
         if (!ok) {
             vibrate(120) // the caller surfaces the failure; transcript stays on the clipboard
@@ -173,36 +172,48 @@ class SokhanAccessibilityService : AccessibilityService() {
         return true
     }
 
-    private fun findEditable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var focusedEditable: AccessibilityNodeInfo? = null
-        var firstEditable: AccessibilityNodeInfo? = null
+    /**
+     * True when the foreground window has a field that accepts a paste. Used to
+     * refuse recording before capturing audio in places with nothing to type into.
+     */
+    fun hasPasteTarget(): Boolean = pasteTarget() != null
+
+    private fun pasteTarget(): AccessibilityNodeInfo? =
+        rootInActiveWindow?.let { findPasteTarget(it) }
+
+    /**
+     * A node is a target when it can actually take text. Probing the action list
+     * is the honest test: it needs no API-level guesswork (unlike isEditable) and
+     * also finds custom/WebView fields that do not report themselves as editable.
+     */
+    private fun acceptsText(node: AccessibilityNodeInfo): Boolean =
+        node.actionList.any {
+            it.id == AccessibilityNodeInfo.ACTION_PASTE ||
+                it.id == AccessibilityNodeInfo.ACTION_SET_TEXT
+        }
+
+    private fun findPasteTarget(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var focusedTarget: AccessibilityNodeInfo? = null
+        var firstTarget: AccessibilityNodeInfo? = null
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited = 0
         while (queue.isNotEmpty() && visited < 300) {
             val node = queue.removeFirst()
             visited++
-            if (isEditableNode(node) && node.isFocusable) {
+            if (node.isEnabled && acceptsText(node)) {
                 if (node.isFocused) {
-                    focusedEditable = node
+                    focusedTarget = node
                     break
                 }
-                if (firstEditable == null) firstEditable = node
+                if (firstTarget == null) firstTarget = node
             }
             for (i in 0 until node.childCount) {
                 node.getChild(i)?.let { queue.add(it) }
             }
         }
-        return focusedEditable ?: firstEditable
+        return focusedTarget ?: firstTarget
     }
-
-    /**
-     * AccessibilityNodeInfo.isEditable is API 30; on Android 8–10 fall back to
-     * the widget-class heuristic so paste still finds text fields.
-     */
-    private fun isEditableNode(node: AccessibilityNodeInfo): Boolean =
-        if (Build.VERSION.SDK_INT >= 30) node.isEditable
-        else node.className?.toString()?.contains("EditText") == true
 
     private fun vibrate(ms: Long) {
         val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= 31) {

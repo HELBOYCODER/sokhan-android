@@ -28,5 +28,6 @@
     <string name="max_duration">Maximum recording length reached</string>
     <string name="mic_needed">Microphone permission is required</string>
     <string name="no_service">Accessibility service is not enabled</string>
+    <string name="no_field">No text field here — tap into a text box first</string>
     <string name="empty_result">No speech was heard</string>
 </resources>

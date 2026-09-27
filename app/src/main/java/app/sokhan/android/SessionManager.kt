@@ -67,7 +67,9 @@ object SessionManager {
     fun toggle(context: Context) {
         when (_state.value) {
             State.Idle -> start(context)
+            // If the service died without telling us, recover instead of wedging.
             State.Recording -> RecordingService.instance?.stopCapture()
+                ?: run { _state.value = State.Idle }
             State.Transcribing -> Unit // already finishing; ignore taps
         }
     }
@@ -85,6 +87,23 @@ object SessionManager {
     }
 
     private fun start(context: Context) {
+        // Refuse before capturing any audio when there is nowhere to type: the
+        // button should simply do nothing outside a text field.
+        val service = SokhanAccessibilityService.instance
+        if (service == null) {
+            toast(context, R.string.no_service)
+            return
+        }
+        // Without RECORD_AUDIO the recorder fails to initialise and the button
+        // looks dead; say so instead of capturing audio that cannot be transcribed.
+        if (!hasMicrophonePermission(context)) {
+            toast(context, R.string.mic_needed)
+            return
+        }
+        if (!service.hasPasteTarget()) {
+            toast(context, R.string.no_field)
+            return
+        }
         if (tryStart(context)) return
         // Background FGS start blocked (our service is system-bound, so this is
         // rare, but some OEMs differ) — retry from the foreground UI.
@@ -94,6 +113,15 @@ object SessionManager {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
+
+    private fun toast(context: Context, resId: Int) {
+        android.widget.Toast.makeText(context, resId, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    fun hasMicrophonePermission(context: Context): Boolean =
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     /** Called from MainActivity.onResume when a blocked start needs a foreground retry. */
     fun retryStartFromForeground(context: Context) {

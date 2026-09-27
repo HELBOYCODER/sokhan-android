@@ -56,6 +56,8 @@ private val Pink = Color(0xFFF28CBB)
 private val Teal = Color(0xFF5EEAD4)
 private val TextMain = Color(0xFFE6F4F1)
 private val TextDim = Color(0xFF8FB3AE)
+private val OnPink = Color(0xFF1A0E14) // text/icon on Pink
+private val OnTeal = Color(0xFF06251F) // text/thumb on Teal
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,7 +98,7 @@ fun SokhanScreen() {
             )
             Spacer(Modifier.height(20.dp))
 
-            RequestPermissions()
+            PermissionCard()
 
             AccessibilityCard()
             Spacer(Modifier.height(14.dp))
@@ -111,16 +113,35 @@ fun SokhanScreen() {
 }
 
 @Composable
-private fun RequestPermissions() {
+private fun PermissionCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var granted by remember { mutableStateOf(SessionManager.hasMicrophonePermission(context)) }
+    val needed = buildList {
+        add(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+    }.toTypedArray()
+
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { }
-    LaunchedEffect(Unit) {
-        val wanted = buildList {
-            add(Manifest.permission.RECORD_AUDIO)
-            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+    ) { granted = SessionManager.hasMicrophonePermission(context) }
+
+    // Ask on first open; RECORD_AUDIO is a runtime permission, so without it the
+    // button appears to do nothing at all.
+    LaunchedEffect(Unit) { if (!granted) launcher.launch(needed) }
+
+    SokhanCard("اجازه‌ها") {
+        Text(
+            if (granted) "اجازه میکروفون داده شده است"
+            else "برای ضبط، اجازه میکروفون لازم است",
+            color = if (granted) Teal else Pink, fontSize = 14.sp
+        )
+        if (!granted) {
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { launcher.launch(needed) },
+                colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = OnPink)
+            ) { Text("دادن اجازه میکروفون") }
         }
-        launcher.launch(wanted.toTypedArray())
     }
 }
 
@@ -167,7 +188,7 @@ private fun AccessibilityCard() {
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             },
-            colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = Color(0xFF1A0E14))
+            colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = OnPink)
         ) { Text("تنظیمات دسترسی‌پذیری") }
     }
 }
@@ -199,7 +220,7 @@ private fun LanguageCard() {
                     label = { Text(label, fontSize = 13.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Teal,
-                        selectedLabelColor = Color(0xFF06251F),
+                        selectedLabelColor = OnTeal,
                         labelColor = TextDim,
                     )
                 )
@@ -222,7 +243,7 @@ private fun LanguageCard() {
                     },
                     colors = SwitchDefaults.colors(
                         checkedTrackColor = Teal,
-                        checkedThumbColor = Color(0xFF06251F)
+                        checkedThumbColor = OnTeal
                     )
                 )
             }

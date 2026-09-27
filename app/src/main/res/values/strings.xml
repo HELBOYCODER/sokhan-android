@@ -28,5 +28,6 @@
     <string name="max_duration">ضبط به حداکثر طول رسید و پایان یافت</string>
     <string name="mic_needed">برای ضبط، اجازه میکروفون لازم است</string>
     <string name="no_service">سرویس دسترسی‌پذیری فعال نیست</string>
+    <string name="no_field">اینجا کادر متنی نیست — اول در یک کادر تایپ بزنید</string>
     <string name="empty_result">صدایی شنیده نشد</string>
 </resources>
