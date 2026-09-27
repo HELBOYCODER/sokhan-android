@@ -16,6 +16,8 @@ object SessionManager {
     private const val PREFS = "sokhan"
     private const val KEY_LANGUAGE = "language"
     private const val KEY_HALFSPACE = "fa_halfspace"
+    private const val KEY_OVERLAY_X = "overlay_x"
+    private const val KEY_OVERLAY_Y = "overlay_y"
     private const val DEFAULT_LANGUAGE = "fa-IR"
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -46,6 +48,17 @@ object SessionManager {
     fun setFaHalfspace(context: Context, value: Boolean) {
         faHalfspace = value
         prefs(context).edit().putBoolean(KEY_HALFSPACE, value).apply()
+    }
+
+    /** Last dragged position of the floating button, or null for the default. */
+    fun overlayPosition(context: Context): Pair<Int, Int>? {
+        val p = prefs(context)
+        if (!p.contains(KEY_OVERLAY_X) || !p.contains(KEY_OVERLAY_Y)) return null
+        return p.getInt(KEY_OVERLAY_X, 0) to p.getInt(KEY_OVERLAY_Y, 0)
+    }
+
+    fun setOverlayPosition(context: Context, x: Int, y: Int) {
+        prefs(context).edit().putInt(KEY_OVERLAY_X, x).putInt(KEY_OVERLAY_Y, y).apply()
     }
 
     private fun prefs(context: Context) =

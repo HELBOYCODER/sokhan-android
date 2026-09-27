@@ -80,8 +80,10 @@ class SokhanAccessibilityService : AccessibilityService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (resources.displayMetrics.widthPixels * 0.72f).toInt()
-            y = (resources.displayMetrics.heightPixels * 0.12f).toInt()
+            // Keep the spot the user dragged it to; fall back to the default.
+            val saved = SessionManager.overlayPosition(this@SokhanAccessibilityService)
+            x = saved?.first ?: (resources.displayMetrics.widthPixels * 0.72f).toInt()
+            y = saved?.second ?: (resources.displayMetrics.heightPixels * 0.12f).toInt()
         }
 
         var downX = 0f; var downY = 0f; var downPX = 0; var downPY = 0
@@ -106,7 +108,16 @@ class SokhanAccessibilityService : AccessibilityService() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!dragging) SessionManager.toggle(this)
+                    if (dragging) {
+                        // Keep the button fully on screen, then remember the spot.
+                        val dm = resources.displayMetrics
+                        params.x = params.x.coerceIn(0, dm.widthPixels - size)
+                        params.y = params.y.coerceIn(0, dm.heightPixels - size)
+                        wm.updateViewLayout(v, params)
+                        SessionManager.setOverlayPosition(this@SokhanAccessibilityService, params.x, params.y)
+                    } else {
+                        SessionManager.toggle(this)
+                    }
                     true
                 }
                 else -> false
