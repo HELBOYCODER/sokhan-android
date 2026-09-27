@@ -54,7 +54,7 @@ object LiveTyper {
     }
 
     private fun updateOnMain(text: StreamText) {
-        val ic = SokhanInputMethod.instance?.inputConnection ?: return
+        val ic = SokhanInputMethod.instance?.currentInputConnection ?: return
         val transform = { s: String -> SokhanInputMethod.instance?.transformForCommit(s) ?: s }
 
         if (text.committed == typed) {
@@ -82,7 +82,7 @@ object LiveTyper {
     }
 
     private fun finishOnMain(finalCommitted: String): String? {
-        val ic = SokhanInputMethod.instance?.inputConnection
+        val ic = SokhanInputMethod.instance?.currentInputConnection
         if (ic == null) return if (typed.isEmpty()) null else typed
 
         val target = if (finalCommitted.length >= typed.length && finalCommitted.startsWith(typed)) {

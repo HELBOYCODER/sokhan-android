@@ -1,7 +1,6 @@
 package app.sokhan.android
 
 import android.inputmethodservice.InputMethodService
-import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -106,15 +105,11 @@ class SokhanInputMethod : InputMethodService() {
      */
     fun pasteViaConnection(text: String): Boolean {
         val ic = currentInputConnection ?: return false
-        val clipped = TextUtils.getClip(ic)
-        ic.commitText(text, 1)
-        if (clipped != null) {
-            try {
-                ic.setComposingRegion(clipped.selectionStart, clipped.selectionEnd)
-            } catch (_: Exception) {
-                // Some editors reject a stale selection; the text is already in.
-            }
+        return try {
+            ic.commitText(text, 1)
+            true
+        } catch (_: Exception) {
+            false
         }
-        return true
     }
 }
