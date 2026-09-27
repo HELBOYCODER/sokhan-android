@@ -32,13 +32,16 @@ data class RecognitionEvent(
 
 private val counter = AtomicLong(0)
 
+/** 0x9E3779B97F4A7C15 as a Long bit pattern (exceeds Long.MAX_VALUE as a literal). */
+private const val GOLDEN_MULTIPLIER: Long = -7046029288634856825L
+
 fun pairKey(): String {
     val nowMicros = System.currentTimeMillis() * 1000
     // Mirror Chromium: high 32 bits random, low 32 bits timestamp, hex-encoded.
     val seed = nowMicros xor (counter.getAndIncrement() shl 40)
     var rnd = seed * 6364136223846793005L + 1442695040888963407L
     rnd = rnd xor (rnd ushr 31)
-    val key = ((rnd and -0x100000000L) or (nowMicros and 0xFFFFFFFFL)) * 0x9E3779B97F4A7C15L
+    val key = ((rnd and -0x100000000L) or (nowMicros and 0xFFFFFFFFL)) * GOLDEN_MULTIPLIER
     return String.format("%016X", key)
 }
 
