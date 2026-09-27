@@ -13,6 +13,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -32,11 +33,13 @@ class SokhanAccessibilityService : AccessibilityService() {
         @Volatile var instance: SokhanAccessibilityService? = null
         private const val OVERLAY_DP = 64
         private const val DRAG_SLOP = 12
+        /** Blinking caption caret, like the desktop subtitle panel. */
+        private const val CARET = "\u258c"
     }
 
     private val serviceScope = CoroutineScope(Job() + Dispatchers.Main)
     private val handler = Handler(Looper.getMainLooper())
-    private var overlay: ImageView? = null
+    private var overlay: View? = null
     private var indicator: android.animation.ValueAnimator? = null
     private var windowManager: WindowManager? = null
 
@@ -67,13 +70,41 @@ class SokhanAccessibilityService : AccessibilityService() {
         if (overlay != null) return
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager = wm
-        val img = ImageView(this)
         val density = resources.displayMetrics.density
         val size = (OVERLAY_DP * density).toInt()
+
+        val img = ImageView(this)
         img.setImageResource(R.drawable.overlay_idle)
+        val wave = WaveView(this)
+        wave.layoutParams = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, size
+        )
+        val caption = android.widget.TextView(this).apply {
+            setTextColor(0xFFE6F4F1.toInt())
+            textSize = 14f
+            maxLines = 3
+            setBackgroundColor(0xE60A1A1F.toInt())
+            setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
+            maxWidth = (320 * density).toInt()
+            visibility = View.GONE
+        }
+
+        val row = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(wave)
+        row.addView(img, android.widget.LinearLayout.LayoutParams(size, size))
+
+        val root = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = Gravity.END
+        }
+        root.addView(caption)
+        root.addView(row)
 
         val params = WindowManager.LayoutParams(
-            size, size,
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -90,7 +121,7 @@ class SokhanAccessibilityService : AccessibilityService() {
         var downX = 0f; var downY = 0f; var downPX = 0; var downPY = 0
         var dragging = false
         val slopPx = DRAG_SLOP * density
-        img.setOnTouchListener { v, ev ->
+        img.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = ev.rawX; downY = ev.rawY
@@ -104,7 +135,7 @@ class SokhanAccessibilityService : AccessibilityService() {
                         dragging = true
                         params.x = downPX + dx.toInt()
                         params.y = downPY + dy.toInt()
-                        wm.updateViewLayout(v, params)
+                        wm.updateViewLayout(root, params)
                     }
                     true
                 }
@@ -114,7 +145,7 @@ class SokhanAccessibilityService : AccessibilityService() {
                         val dm = resources.displayMetrics
                         params.x = params.x.coerceIn(0, dm.widthPixels - size)
                         params.y = params.y.coerceIn(0, dm.heightPixels - size)
-                        wm.updateViewLayout(v, params)
+                        wm.updateViewLayout(root, params)
                         SessionManager.setOverlayPosition(this@SokhanAccessibilityService, params.x, params.y)
                     } else {
                         SessionManager.toggle(this)
@@ -136,6 +167,7 @@ class SokhanAccessibilityService : AccessibilityService() {
                     }
                 )
                 img.scaleX = 1f; img.scaleY = 1f; img.rotation = 0f
+                wave.visibility = if (state is SessionManager.State.Recording) View.VISIBLE else View.GONE
                 // Match the desktop rhythm: 1.9 s listening pulse (sdot-pulse),
                 // 0.7 s linear spin while the request is in flight (sspin).
                 indicator = when (state) {
@@ -145,9 +177,24 @@ class SokhanAccessibilityService : AccessibilityService() {
                 }
             }
         }
+        serviceScope.launch {
+            SessionManager.liveText.collect { t ->
+                val shown = if (t.tentative.isBlank()) t.committed
+                else t.committed + " " + t.tentative + CARET
+                // Persian/Arabic captions must read right-to-left; Latin must not.
+                val rtl = SessionManager.language.startsWith("fa") || SessionManager.language.startsWith("ar")
+                caption.textDirection = if (rtl) View.TEXT_DIRECTION_RTL else View.TEXT_DIRECTION_LTR
+                caption.gravity = if (rtl) android.view.Gravity.END else android.view.Gravity.START
+                caption.text = shown
+                caption.visibility = if (shown.isBlank()) View.GONE else View.VISIBLE
+            }
+        }
+        serviceScope.launch {
+            SessionManager.micLevel.collect { wave.setLevel(it) }
+        }
 
-        wm.addView(img, params)
-        overlay = img
+        wm.addView(root, params)
+        overlay = root
     }
 
     /** Scale "breathing" used for the listening state. */

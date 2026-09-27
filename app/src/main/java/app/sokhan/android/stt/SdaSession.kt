@@ -5,6 +5,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -26,6 +28,7 @@ const val FINISH_GRACE_MS = 10_000L
 
 private class SessionState {
     var committed: String = ""
+    var tentative: String = ""
     var lastFinalAt: Long = 0
     var downClosed: Boolean = false
     /** Set once the caller requested finish; gates completion and the deadline. */
@@ -34,6 +37,15 @@ private class SessionState {
     var earlyDownClose: Boolean = false
     var statusError: Int? = null
     var upError: String? = null
+}
+
+/**
+ * Live caption, mirroring the desktop's InterimText: committed finals plus the
+ * current tentative hypothesis. The desktop renders both in one line without
+ * colouring the tentative part, so this keeps them separate but unstyled.
+ */
+data class StreamText(val committed: String, val tentative: String) {
+    val isEmpty: Boolean get() = committed.isEmpty() && tentative.isEmpty()
 }
 
 private sealed class Cmd {
@@ -69,6 +81,11 @@ class SdaSession(
     private val bodyQueue = LinkedBlockingQueue<ByteArray?>()
     private val state = SessionState()
     private val result = CompletableDeferred<Result<String>>()
+
+    /** Live caption for the overlay; updated as /down events arrive. */
+    private val _liveText = MutableStateFlow(StreamText("", ""))
+    val liveText: StateFlow<StreamText> = _liveText
+
     @Volatile private var downCall: okhttp3.Call? = null
     private var started = false
 
@@ -89,6 +106,19 @@ class SdaSession(
         check(!started) { "session already started" }
         started = true
         scope.launch { runSession() }
+    }
+
+    /**
+     * Abort a running session. Closing [cmds] is what lets the audio pump exit —
+     * without it the pump stays parked in receive(), the request body never ends
+     * and the /down stream is left open.
+     */
+    fun cancel() {
+        cmds.close()
+        bodyQueue.clear()
+        bodyQueue.add(null)
+        downCall?.cancel()
+        result.complete(Result.failure(IOException("session cancelled")))
     }
 
     private suspend fun runSession() {
@@ -224,18 +254,26 @@ class SdaSession(
         }
     }
 
+    /** Merge one /down event exactly like engine.rs: finals commit, others replace the hypothesis. */
     private fun applyEvent(event: RecognitionEvent) {
         val status = event.status
         if (status != null && status != SDA_STATUS_SUCCESS) state.statusError = status
+        var changed = false
         for (result in event.results) {
-            if (!result.isFinal) continue // batch mode ignores interim results
             val top = result.alternatives.firstOrNull() ?: continue
             val t = top.transcript.trim()
             if (t.isEmpty()) continue
-            if (state.committed.isNotEmpty()) state.committed += " "
-            state.committed += t
-            state.lastFinalAt = System.currentTimeMillis()
+            if (result.isFinal) {
+                if (state.committed.isNotEmpty()) state.committed += " "
+                state.committed += t
+                state.tentative = ""
+                state.lastFinalAt = System.currentTimeMillis()
+            } else {
+                state.tentative = t
+            }
+            changed = true
         }
+        if (changed) _liveText.value = StreamText(state.committed, state.tentative)
     }
 
     private fun runUp(upUrl: String) {

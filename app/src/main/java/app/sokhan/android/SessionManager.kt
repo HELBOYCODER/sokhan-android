@@ -2,6 +2,7 @@ package app.sokhan.android
 
 import android.content.Context
 import android.content.Intent
+import app.sokhan.android.stt.StreamText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -25,6 +26,22 @@ object SessionManager {
 
     private val _lastResult = MutableStateFlow<String?>(null)
     val lastResult: StateFlow<String?> = _lastResult
+
+    /** Live caption while speaking (committed finals + current hypothesis). */
+    private val _liveText = MutableStateFlow(StreamText("", ""))
+    val liveText: StateFlow<StreamText> = _liveText
+
+    /** Smoothed mic level 0..1 driving the overlay waveform. */
+    private val _micLevel = MutableStateFlow(0f)
+    val micLevel: StateFlow<Float> = _micLevel
+
+    fun setLiveText(text: StreamText) {
+        _liveText.value = text
+    }
+
+    fun setMicLevel(level: Float) {
+        _micLevel.value = level.coerceIn(0f, 1f)
+    }
 
     /** Set when an FGS start was blocked and must be retried from the foreground UI. */
     @Volatile var pendingStart: Boolean = false
@@ -76,6 +93,7 @@ object SessionManager {
 
     private fun tryStart(context: Context): Boolean {
         if (_state.value != State.Idle) return false
+        _liveText.value = StreamText("", "")
         _state.value = State.Recording
         return try {
             context.startForegroundService(Intent(context, RecordingService::class.java))
@@ -136,6 +154,8 @@ object SessionManager {
 
     internal fun finishWith(text: String?) {
         if (text != null) _lastResult.value = text
+        _liveText.value = StreamText("", "")
+        _micLevel.value = 0f
         _state.value = State.Idle
     }
 }
