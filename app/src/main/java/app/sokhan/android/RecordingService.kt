@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.widget.Toast
 import app.sokhan.android.stt.Engine
 import app.sokhan.android.stt.FLAC_SAMPLE_RATE
+import app.sokhan.android.stt.applyPersianHalfspace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -171,7 +172,9 @@ class RecordingService : Service() {
 
         val result = Engine.transcribe(samples, SessionManager.language, scope)
         result.fold(
-            onSuccess = { text ->
+            onSuccess = { raw ->
+                val text = if (SessionManager.faHalfspace && SessionManager.language.startsWith("fa"))
+                    applyPersianHalfspace(raw) else raw
                 if (text.isBlank()) {
                     showToast(getString(R.string.empty_result))
                     SessionManager.finishWith(null)

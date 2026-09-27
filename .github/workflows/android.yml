@@ -26,12 +26,8 @@ jobs:
       - name: Build and test
         run: gradle test assembleRelease --no-daemon --stacktrace
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Sokhan-apk
-          path: app/build/outputs/apk/release/*.apk
-
+      # The tagged release carries the APK; no workflow artifact is uploaded,
+      # which keeps us clear of Actions artifact-storage quotas on private repos.
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

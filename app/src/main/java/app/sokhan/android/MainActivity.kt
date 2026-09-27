@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -173,6 +176,7 @@ private fun AccessibilityCard() {
 private fun LanguageCard() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var current by remember { mutableStateOf(SessionManager.language) }
+    var halfspace by remember { mutableStateOf(SessionManager.faHalfspace) }
     val options = listOf(
         "fa-IR" to "فارسی",
         "en-US" to "English",
@@ -197,6 +201,28 @@ private fun LanguageCard() {
                         selectedContainerColor = Teal,
                         selectedLabelColor = Color(0xFF06251F),
                         labelColor = TextDim,
+                    )
+                )
+            }
+        }
+        // Half-space (ZWNJ) post-processing only affects Persian output.
+        if (current.startsWith("fa")) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("نیم‌فاصله فارسی (می‌شود)", color = TextMain, fontSize = 14.sp)
+                Switch(
+                    checked = halfspace,
+                    onCheckedChange = {
+                        halfspace = it
+                        SessionManager.setFaHalfspace(context, it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = Teal,
+                        checkedThumbColor = Color(0xFF06251F)
                     )
                 )
             }

@@ -15,6 +15,7 @@ object SessionManager {
 
     private const val PREFS = "sokhan"
     private const val KEY_LANGUAGE = "language"
+    private const val KEY_HALFSPACE = "fa_halfspace"
     private const val DEFAULT_LANGUAGE = "fa-IR"
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -28,13 +29,23 @@ object SessionManager {
 
     var language: String = DEFAULT_LANGUAGE
 
+    /** Mirrors the desktop's fa_halfspace_enabled, on by default. */
+    var faHalfspace: Boolean = true
+
     fun loadPrefs(context: Context) {
-        language = prefs(context).getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
+        val p = prefs(context)
+        language = p.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
+        faHalfspace = p.getBoolean(KEY_HALFSPACE, true)
     }
 
     fun setLanguage(context: Context, value: String) {
         language = value
         prefs(context).edit().putString(KEY_LANGUAGE, value).apply()
+    }
+
+    fun setFaHalfspace(context: Context, value: Boolean) {
+        faHalfspace = value
+        prefs(context).edit().putBoolean(KEY_HALFSPACE, value).apply()
     }
 
     private fun prefs(context: Context) =
