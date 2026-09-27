@@ -106,7 +106,7 @@ class RecordingService : Service() {
         stopRequested = true
     }
 
-    private fun recordAndTranscribe() {
+    private suspend fun recordAndTranscribe() {
         val chunks = ArrayList<ShortArray>()
         var total = 0
         var hitCap = false
