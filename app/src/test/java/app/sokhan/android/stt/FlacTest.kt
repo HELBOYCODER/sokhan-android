@@ -13,9 +13,9 @@ class FlacTest {
 
     @Test
     fun crc16_matches_arc_check_value() {
-        // CRC-16 (poly 0x8005, init 0, no reflection): check of "123456789" is 0xBB3D.
+        // CRC-16 (poly 0x8005, init 0, no reflection): check of "123456789" is 0xFEE8.
         val crc = crc16("123456789".toByteArray(Charsets.US_ASCII))
-        assertEquals(0xBB3D, crc.toInt() and 0xFFFF)
+        assertEquals(0xFEE8, crc.toInt() and 0xFFFF)
     }
 
     @Test
@@ -30,10 +30,10 @@ class FlacTest {
     fun streaminfo_carries_known_total() {
         val n = 123_456
         val out = encodeF32(FloatArray(n))
-        // Bytes 8..16 of the metadata payload hold rate|channels|depth|total.
-        // rate=16000, ch=1, depth=16 -> high bits fixed; total lives in the low 36 bits.
+        // The STREAMINFO payload starts at byte 8; rate|channels|depth|total sits
+        // after min/max blocksize (4) and min/max framesize (6), so at byte 18.
         var tail = 0L
-        for (i in 0 until 8) tail = (tail shl 8) or (out[12 + i].toLong() and 0xFF)
+        for (i in 0 until 8) tail = (tail shl 8) or (out[18 + i].toLong() and 0xFF)
         assertEquals(16000L, tail ushr 44)
         assertEquals(15L, (tail shr 36) and 0x3F)
         assertEquals(n.toLong(), tail and 0xF_FFFF_FFFFL)

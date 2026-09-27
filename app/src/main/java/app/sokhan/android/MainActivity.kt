@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private val Background = Color(0xFF0A1A1F)
@@ -131,23 +133,28 @@ private fun SokhanCard(content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun SokhanCard(title: String, content: @Composable () -> Unit) {
+    SokhanCard {
+        Text(title, color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        content()
+    }
+}
+
+@Composable
 private fun AccessibilityCard() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val enabled = remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        // Refresh the service status when returning from the settings screen.
-        while (true) {
-            enabled.value = SokhanAccessibilityService.instance != null
-            kotlinx.coroutines.delay(1000)
-        }
+    // The overlay can only change while we are away in the accessibility
+    // settings, so refresh on resume rather than polling in a loop.
+    var enabled by remember { mutableStateOf(SokhanAccessibilityService.instance != null) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        enabled = SokhanAccessibilityService.instance != null
     }
-    SokhanCard {
-        Text("دسترسی‌پذیری", color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
+    SokhanCard("دسترسی‌پذیری") {
         Text(
-            if (enabled.value) "سرویس فعال است — دکمه لب روی صفحه است"
+            if (enabled) "سرویس فعال است — دکمه لب روی صفحه است"
             else "برای نمایش دکمه لب، «سخن» را فعال کنید",
-            color = if (enabled.value) Teal else TextMain, fontSize = 14.sp
+            color = if (enabled) Teal else TextMain, fontSize = 14.sp
         )
         Spacer(Modifier.height(10.dp))
         Button(
@@ -172,9 +179,8 @@ private fun LanguageCard() {
         "ar-SA" to "العربية",
         "tr-TR" to "Türkçe",
     )
-    SokhanCard {
-        Text("زبان تشخیص گفتار", color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(10.dp))
+    SokhanCard("زبان تشخیص گفتار") {
+        Spacer(Modifier.height(4.dp))
         @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -202,9 +208,7 @@ private fun LanguageCard() {
 private fun StatusCard() {
     val state by SessionManager.state.collectAsStateWithLifecycle()
     val last by SessionManager.lastResult.collectAsStateWithLifecycle()
-    SokhanCard {
-        Text("وضعیت", color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
+    SokhanCard("وضعیت") {
         Text(
             when (state) {
                 SessionManager.State.Idle -> "آماده — روی دکمه لب بزنید"
@@ -214,11 +218,11 @@ private fun StatusCard() {
             color = if (state == SessionManager.State.Idle) TextMain else Teal,
             fontSize = 14.sp
         )
-        if (last != null) {
+        last?.let { text ->
             Spacer(Modifier.height(10.dp))
             Text("آخرین نتیجه", color = TextDim, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
-            SelectionContainerText(last.orEmpty())
+            SelectionContainerText(text)
         }
     }
 }
@@ -232,9 +236,7 @@ private fun SelectionContainerText(text: String) {
 
 @Composable
 private fun GuideCard() {
-    SokhanCard {
-        Text("راهنما", color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
+    SokhanCard("راهنما") {
         Text(
             "۱. سرویس دسترسی‌پذیری را فعال کنید.\n" +
                 "۲. دکمه لب روی صفحه ظاهر می‌شود؛ با کشیدن جابه‌جا کنید.\n" +

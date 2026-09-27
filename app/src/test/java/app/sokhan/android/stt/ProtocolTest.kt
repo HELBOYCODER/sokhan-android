@@ -6,11 +6,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProtocolTest {
+    /** tag(field, wire) + payload length + bytes, the repeated framing pattern. */
+    private fun lengthDelimited(fieldNo: Int, vararg payload: ByteArray): ByteArray {
+        val len = payload.sumOf { it.size }
+        return byteArrayOf(((fieldNo shl 3) or 2).toByte(), len.toByte()) + payload.flatten().toByteArray()
+    }
+
     @Test
     fun parses_handcrafted_event() {
-        val alt = byteArrayOf(0x0A, 0x02) + "hi".toByteArray(Charsets.UTF_8)
-        val result = byteArrayOf(0x0A, alt.size.toByte()) + alt + byteArrayOf(0x10, 0x01)
-        val buf = byteArrayOf(0x12, result.size.toByte()) + result
+        val alt = lengthDelimited(1, "hi".toByteArray(Charsets.UTF_8))
+        val result = lengthDelimited(1, alt) + byteArrayOf(0x10, 0x01)
+        val buf = lengthDelimited(2, result)
 
         val event = parseEvent(buf)!!
         assertNull(event.status)
@@ -21,11 +27,11 @@ class ProtocolTest {
 
     @Test
     fun parses_status_and_confidence() {
-        // status=1 (varint field 1), result with confidence float field 2 (wire 5)
-        val alt = byteArrayOf(0x0A, 0x01) + "x".toByteArray() +
-            byteArrayOf(0x15, 0x3F, 0x80.toByte(), 0x00, 0x00) // confidence 1.0f
-        val result = byteArrayOf(0x0A, alt.size.toByte()) + alt
-        val buf = byteArrayOf(0x08, 0x01, 0x12, result.size.toByte()) + result
+        // confidence is field 2, wire 5 (fixed32), little-endian 1.0f
+        val alt = lengthDelimited(1, "x".toByteArray()) +
+            byteArrayOf(0x15, 0x00, 0x00, 0x80.toByte(), 0x3F)
+        val result = lengthDelimited(1, alt)
+        val buf = byteArrayOf(0x08, 0x01) + lengthDelimited(2, result)
 
         val event = parseEvent(buf)!!
         assertEquals(1, event.status)
@@ -37,7 +43,14 @@ class ProtocolTest {
     fun malformed_input_returns_null() {
         // Truncated varint in a result length field.
         assertNull(parseEvent(byteArrayOf(0x12, 0x7F, 0x7F, 0x7F)))
-        assertNull(parseEvent(byteArrayOf()))
+    }
+
+    @Test
+    fun empty_input_parses_to_an_empty_event() {
+        // Parity with Rust parse_event: an empty buffer is valid, zero results.
+        val event = parseEvent(byteArrayOf())!!
+        assertNull(event.status)
+        assertTrue(event.results.isEmpty())
     }
 
     @Test

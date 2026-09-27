@@ -12,10 +12,12 @@ import java.io.ByteArrayOutputStream
 const val FLAC_BLOCK_SAMPLES = 4_096
 const val FLAC_SAMPLE_RATE = 16_000
 
-fun crc8(data: ByteArray): Byte {
+fun crc8(data: ByteArray): Byte = crc8(data, data.size)
+
+fun crc8(data: ByteArray, len: Int): Byte {
     var crc = 0
-    for (b in data) {
-        var c = crc xor (b.toInt() and 0xFF)
+    for (i in 0 until len) {
+        var c = crc xor (data[i].toInt() and 0xFF)
         repeat(8) {
             c = if (c and 0x80 != 0) (c shl 1) xor 0x07 else c shl 1
         }
@@ -24,10 +26,12 @@ fun crc8(data: ByteArray): Byte {
     return crc.toByte()
 }
 
-fun crc16(data: ByteArray): Short {
+fun crc16(data: ByteArray): Short = crc16(data, data.size)
+
+fun crc16(data: ByteArray, len: Int): Short {
     var crc = 0
-    for (b in data) {
-        var c = crc xor ((b.toInt() and 0xFF) shl 8)
+    for (i in 0 until len) {
+        var c = crc xor ((data[i].toInt() and 0xFF) shl 8)
         repeat(8) {
             c = if (c and 0x8000 != 0) (c shl 1) xor 0x8005 else c shl 1
         }
@@ -36,8 +40,12 @@ fun crc16(data: ByteArray): Short {
     return crc.toShort()
 }
 
-class BitWriter {
-    private val out = ByteArrayOutputStream(64 * 1024)
+/**
+ * Accumulates the frame bytes. Extending ByteArrayOutputStream lets the CRCs
+ * read the internal buffer directly instead of copying the whole ~8 KB frame
+ * twice per encode.
+ */
+class BitWriter : ByteArrayOutputStream(64 * 1024) {
     private var byte = 0
     private var bits = 0
 
@@ -46,7 +54,7 @@ class BitWriter {
             byte = (byte shl 1) or (((value shr i) and 1L).toInt())
             bits++
             if (bits == 8) {
-                out.write(byte)
+                super.write(byte)
                 byte = 0
                 bits = 0
             }
@@ -55,14 +63,17 @@ class BitWriter {
 
     fun flushBytes() {
         if (bits > 0) {
-            out.write(byte shl (8 - bits))
+            super.write(byte shl (8 - bits))
             byte = 0
             bits = 0
         }
     }
 
-    val bytesSoFar: ByteArray
-        get() = out.toByteArray()
+    /** CRC-8 over the bytes written so far. Only valid when byte-aligned. */
+    fun crc8SoFar(): Byte = crc8(buf, count)
+
+    /** CRC-16 over the bytes written so far. Only valid when byte-aligned. */
+    fun crc16SoFar(): Short = crc16(buf, count)
 }
 
 /** UTF-8 coding of a frame number as required by the FLAC frame header. */
@@ -125,7 +136,7 @@ fun encodeFrame(samples: ShortArray, frameNumber: Long): ByteArray {
     w.write(0b100L, 3) // bits per sample: 16
     w.write(0, 1) // reserved
     writeUtf8Number(w, frameNumber)
-    val headerCrc = crc8(w.bytesSoFar)
+    val headerCrc = w.crc8SoFar()
     w.write(headerCrc.toLong() and 0xFF, 8)
 
     // VERBATIM subframe: pad + type 000001 (LSB-first constants) + wasted=0.
@@ -137,11 +148,11 @@ fun encodeFrame(samples: ShortArray, frameNumber: Long): ByteArray {
     }
     w.flushBytes()
 
-    val frameCrc = crc16(w.bytesSoFar)
+    val frameCrc = w.crc16SoFar()
     w.write((frameCrc.toLong() shr 8) and 0xFF, 8)
     w.write(frameCrc.toLong() and 0xFF, 8)
     w.flushBytes()
-    return w.bytesSoFar
+    return w.toByteArray()
 }
 
 class FlacStreamWriter(totalSamples: Long = 0) {

@@ -14,6 +14,10 @@ const val CHROME_USER_AGENT =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
 const val FLAC_CONTENT_TYPE = "audio/x-flac; rate=16000"
 
+/** SpeechRecognitionStatus codes the /down stream reports. */
+const val SDA_STATUS_SUCCESS = 0
+const val SDA_STATUS_NO_SPEECH = 1
+
 data class Alternative(val transcript: String, val confidence: Float?)
 
 data class RecognitionResult(
@@ -34,15 +38,30 @@ private val counter = AtomicLong(0)
 
 /** 0x9E3779B97F4A7C15 as a Long bit pattern (exceeds Long.MAX_VALUE as a literal). */
 private const val GOLDEN_MULTIPLIER: Long = -7046029288634856825L
+private const val LCG_MULTIPLIER = 6364136223846793005L
+private const val LCG_INCREMENT = 1442695040888963407L
+private const val HEX_DIGITS = "0123456789ABCDEF"
+
+/**
+ * ASCII uppercase hex. String.format would localize digits on fa/ar devices and
+ * corrupt the pair key, while Rust's `{:X}` is always ASCII.
+ */
+private fun hexUpper(value: Long, digits: Int): String {
+    val out = CharArray(digits)
+    for (i in digits - 1 downTo 0) {
+        out[i] = HEX_DIGITS[((value shr (4 * i)) and 0xF).toInt()]
+    }
+    return String(out)
+}
 
 fun pairKey(): String {
     val nowMicros = System.currentTimeMillis() * 1000
     // Mirror Chromium: high 32 bits random, low 32 bits timestamp, hex-encoded.
     val seed = nowMicros xor (counter.getAndIncrement() shl 40)
-    var rnd = seed * 6364136223846793005L + 1442695040888963407L
+    var rnd = seed * LCG_MULTIPLIER + LCG_INCREMENT
     rnd = rnd xor (rnd ushr 31)
     val key = ((rnd and -0x100000000L) or (nowMicros and 0xFFFFFFFFL)) * GOLDEN_MULTIPLIER
-    return String.format("%016X", key)
+    return hexUpper(key, 16)
 }
 
 fun urlencoding(value: String): String {
@@ -52,7 +71,7 @@ fun urlencoding(value: String): String {
         when {
             c in 'A'.code..'Z'.code || c in 'a'.code..'z'.code || c in '0'.code..'9'.code ||
                 c == '-'.code || c == '_'.code || c == '.'.code || c == '~'.code -> sb.append(c.toChar())
-            else -> sb.append('%').append(String.format("%02X", c))
+            else -> sb.append('%').append(hexUpper(c.toLong(), 2))
         }
     }
     return sb.toString()

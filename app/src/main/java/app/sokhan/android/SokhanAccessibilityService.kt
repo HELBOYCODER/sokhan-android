@@ -13,12 +13,10 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.Gravity
 import android.view.MotionEvent
-import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageView
-import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -148,20 +146,20 @@ class SokhanAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow
         val target = root?.let { findEditable(it) }
         val ok = target?.performAction(AccessibilityNodeInfo.ACTION_PASTE) ?: false
-        if (ok) {
-            vibrate(40)
-            // Give the paste a beat, then restore whatever the clipboard held.
-            handler.postDelayed({
-                try {
-                    previous?.let { cm.setPrimaryClip(it) }
-                } catch (_: Exception) {
-                }
-            }, 800)
-            return true
+        if (!ok) {
+            vibrate(120) // the caller surfaces the failure; transcript stays on the clipboard
+            return false
         }
-        vibrate(120)
-        Toast.makeText(this, getString(R.string.insert_failed), Toast.LENGTH_LONG).show()
-        return false
+        vibrate(40)
+        // Give the paste a beat, then restore whatever the clipboard held.
+        handler.postDelayed({
+            try {
+                previous?.let { cm.setPrimaryClip(it) }
+            } catch (_: Exception) {
+                // Benign: a failed restore only leaves the transcript on the clip.
+            }
+        }, 800)
+        return true
     }
 
     private fun findEditable(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -173,7 +171,7 @@ class SokhanAccessibilityService : AccessibilityService() {
         while (queue.isNotEmpty() && visited < 300) {
             val node = queue.removeFirst()
             visited++
-            if (node.isEditable && node.isFocusable) {
+            if (isEditableNode(node) && node.isFocusable) {
                 if (node.isFocused) {
                     focusedEditable = node
                     break
@@ -186,6 +184,14 @@ class SokhanAccessibilityService : AccessibilityService() {
         }
         return focusedEditable ?: firstEditable
     }
+
+    /**
+     * AccessibilityNodeInfo.isEditable is API 30; on Android 8–10 fall back to
+     * the widget-class heuristic so paste still finds text fields.
+     */
+    private fun isEditableNode(node: AccessibilityNodeInfo): Boolean =
+        if (Build.VERSION.SDK_INT >= 30) node.isEditable
+        else node.className?.toString()?.contains("EditText") == true
 
     private fun vibrate(ms: Long) {
         val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= 31) {

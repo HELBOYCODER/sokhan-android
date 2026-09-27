@@ -1,5 +1,6 @@
 package app.sokhan.android.stt
 
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,10 +21,11 @@ import java.util.concurrent.TimeUnit
 const val MAX_WAIT_MS = 45_000L
 /** After the last final result, give the server this long to deliver stragglers. */
 const val QUIET_PERIOD_MS = 1_500L
+/** Grace on top of MAX_WAIT_MS before the caller gives up on the session itself. */
+const val FINISH_GRACE_MS = 10_000L
 
 private class SessionState {
     var committed: String = ""
-    var tentative: String = ""
     var lastFinalAt: Long = 0
     var downClosed: Boolean = false
     /** Set once the caller requested finish; gates completion and the deadline. */
@@ -39,6 +41,20 @@ private sealed class Cmd {
     object Finish : Cmd()
 }
 
+private const val TAG = "SokhanSda"
+
+/**
+ * One client for the whole app: OkHttp pools connections and threads per
+ * instance, and every session needs the same streaming-friendly timeouts.
+ */
+private val sharedClient = OkHttpClient.Builder()
+    .connectTimeout(15, TimeUnit.SECONDS)
+    .readTimeout(0, TimeUnit.MILLISECONDS) // /down streams for the whole dictation
+    .writeTimeout(30, TimeUnit.SECONDS)
+    .callTimeout(0, TimeUnit.MILLISECONDS)
+    .protocols(listOf(okhttp3.Protocol.HTTP_2, okhttp3.Protocol.HTTP_1_1))
+    .build()
+
 /**
  * A single Google SDA recognition request. Feed 16 kHz mono audio, then call
  * [finish] to flush and await the full transcript. The session may only
@@ -49,14 +65,6 @@ class SdaSession(
     private val language: String,
     private val scope: CoroutineScope,
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS) // /down streams for the whole dictation
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .callTimeout(0, TimeUnit.MILLISECONDS)
-        .protocols(listOf(okhttp3.Protocol.HTTP_2, okhttp3.Protocol.HTTP_1_1))
-        .build()
-
     private val cmds = Channel<Cmd>(Channel.UNLIMITED)
     private val bodyQueue = LinkedBlockingQueue<ByteArray?>()
     private val state = SessionState()
@@ -68,17 +76,13 @@ class SdaSession(
         cmds.send(Cmd.Audio(samples))
     }
 
-    suspend fun finish(): Result<String> {
+    suspend fun finish(): Result<String> = try {
         cmds.send(Cmd.Finish)
-        return withTimeout(MAX_WAIT_MS + 10_000) { result.await() }
-    }
-
-    /** Abort the session (process teardown, cancelled recording). */
-    fun cancel() {
-        downCall?.cancel()
-        bodyQueue.clear()
-        bodyQueue.add(null)
-        result.complete(Result.failure(IOException("session cancelled")))
+        withTimeout(MAX_WAIT_MS + FINISH_GRACE_MS) { result.await() }
+    } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+        // The session's own deadline, not a caller cancellation: report it as a
+        // failed transcript so the recording coroutine keeps running normally.
+        Result.failure(IOException("no transcript within ${MAX_WAIT_MS + FINISH_GRACE_MS} ms"))
     }
 
     fun start() {
@@ -121,8 +125,12 @@ class SdaSession(
                         break
                     }
                 }
-            } catch (_: Exception) {
-                // channel closed without finish: session cancelled
+            } catch (e: Exception) {
+                // Channel closed without finish (session cancelled) or an encode
+                // fault. Signal the wait loop so it fails instead of idling.
+                synchronized(state) {
+                    if (!state.finishRequested) state.upError = "audio pump failed: ${e.message}"
+                }
             } finally {
                 bodyQueue.put(null) // ends the request body
             }
@@ -150,13 +158,13 @@ class SdaSession(
                 if (deadline == 0L) deadline = now + MAX_WAIT_MS
                 val hasFinal = state.committed.isNotEmpty()
                 val quiet = state.lastFinalAt in 1..(now - QUIET_PERIOD_MS)
-                if ((hasFinal && (state.downClosed || quiet)) || state.downClosed) {
+                if (state.downClosed || (hasFinal && quiet)) {
                     if (state.earlyDownClose) {
                         error = "speech stream closed before the recording finished"
                     } else {
                         text = state.committed
                         val status = state.statusError
-                        if (status != null && status != 1) error = "service status $status"
+                        if (status != null && status != SDA_STATUS_NO_SPEECH) error = "service status $status"
                     }
                 } else if (now > deadline) {
                     text = state.committed
@@ -187,33 +195,30 @@ class SdaSession(
                 .url(downUrl)
                 .header("User-Agent", CHROME_USER_AGENT)
                 .build()
-            val call = client.newCall(req)
+            val call = sharedClient.newCall(req)
             downCall = call
             call.execute().use { resp ->
                 if (!resp.isSuccessful) {
+                    Log.w(TAG, "/down rejected: HTTP ${resp.code}")
                     markDownClosed()
                     return
                 }
                 val source = resp.body!!.source()
-                val lenBuf = ByteArray(4)
                 while (true) {
-                    source.readFully(lenBuf)
-                    val len = ((lenBuf[0].toInt() and 0xFF) shl 24) or
-                        ((lenBuf[1].toInt() and 0xFF) shl 16) or
-                        ((lenBuf[2].toInt() and 0xFF) shl 8) or
-                        (lenBuf[3].toInt() and 0xFF)
-                    if (len > 1_000_000) {
+                    val len = source.readInt() // okio reads 4 bytes big-endian
+                    if (len !in 0..1_000_000) {
                         markDownClosed()
                         return
                     }
-                    val message = ByteArray(len)
-                    source.readFully(message)
+                    val message = source.readByteArray(len.toLong())
                     val event = parseEvent(message) ?: continue
                     synchronized(state) { applyEvent(event) }
                 }
             }
-        } catch (_: Exception) {
-            // EOF, socket reset, or cancellation — the channel is over.
+        } catch (e: Exception) {
+            // EOF, socket reset, or cancellation — the channel is over. The Rust
+            // original logged here; a dead /down is worth a line in logcat.
+            Log.w(TAG, "/down stream ended: ${e.message}")
         } finally {
             markDownClosed()
         }
@@ -221,19 +226,15 @@ class SdaSession(
 
     private fun applyEvent(event: RecognitionEvent) {
         val status = event.status
-        if (status != null && status != 0) state.statusError = status
+        if (status != null && status != SDA_STATUS_SUCCESS) state.statusError = status
         for (result in event.results) {
+            if (!result.isFinal) continue // batch mode ignores interim results
             val top = result.alternatives.firstOrNull() ?: continue
             val t = top.transcript.trim()
             if (t.isEmpty()) continue
-            if (result.isFinal) {
-                if (state.committed.isNotEmpty()) state.committed += " "
-                state.committed += t
-                state.tentative = ""
-                state.lastFinalAt = System.currentTimeMillis()
-            } else {
-                state.tentative = t
-            }
+            if (state.committed.isNotEmpty()) state.committed += " "
+            state.committed += t
+            state.lastFinalAt = System.currentTimeMillis()
         }
     }
 
@@ -254,7 +255,7 @@ class SdaSession(
             .post(body)
             .build()
         try {
-            client.newCall(req).execute().use { resp ->
+            sharedClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     val snippet = try {
                         resp.body?.string()?.take(160) ?: ""

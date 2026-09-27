@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChunkPlannerTest {
-    private val sr = 16_000
+    private val sr = FLAC_SAMPLE_RATE
 
     private fun loud(seconds: Int) = FloatArray(seconds * sr) { i ->
         (i * 0.05f).let { Math.sin(it.toDouble()).toFloat() * 0.3f }

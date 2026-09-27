@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
 import app.sokhan.android.stt.Engine
+import app.sokhan.android.stt.FLAC_SAMPLE_RATE
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,7 +35,7 @@ class RecordingService : Service() {
         const val NOTIF_ID = 1
         const val ACTION_STOP = "app.sokhan.android.STOP"
         const val ACTION_CANCEL = "app.sokhan.android.CANCEL"
-        const val SAMPLE_RATE = 16_000
+        const val SAMPLE_RATE = FLAC_SAMPLE_RATE
         const val MAX_SAMPLES = 20 * 60 * SAMPLE_RATE // 20-minute soft cap
 
         @Volatile var instance: RecordingService? = null
@@ -143,7 +144,7 @@ class RecordingService : Service() {
         } catch (e: Exception) {
             audioRecord?.release(); audioRecord = null
             SessionManager.finishWith(null)
-            showError(e.message ?: "recording failed")
+            showToast(e.message ?: "recording failed")
             stopSelf()
             return
         }
@@ -181,14 +182,12 @@ class RecordingService : Service() {
                 }
             },
             onFailure = { err ->
-                showError(getString(R.string.record_failed, err.message ?: err.javaClass.simpleName))
+                showToast(getString(R.string.record_failed, err.message ?: err.javaClass.simpleName))
                 SessionManager.finishWith(null)
             }
         )
         stopSelf()
     }
-
-    private fun showError(msg: String) = showToast(msg)
 
     private fun showToast(msg: String) {
         // Not scope.launch: stopSelf() may cancel the scope before the toast runs.
