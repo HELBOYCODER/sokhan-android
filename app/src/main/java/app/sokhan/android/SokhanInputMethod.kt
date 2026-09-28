@@ -62,27 +62,60 @@ class SokhanInputMethod : InputMethodService() {
         val density = resources.displayMetrics.density
         val strip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(0xFF10262B.toInt())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            )
         }
+        val pad = (10 * density).toInt()
+
+        // One wide dictation key: this keyboard exists to start and stop speech,
+        // it is not meant to replace the user's own layout for manual typing.
         val button = Button(this).apply {
             text = context.getString(R.string.ime_listen)
+            isAllCaps = false
             setTextColor(0xFF0A1A1F.toInt())
             backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFF28CBB.toInt())
-            minWidth = (160 * density).toInt()
             setOnClickListener {
                 SessionManager.toggle(this@SokhanInputMethod)
                 postDelayed({ refreshButton() }, 80)
             }
         }
         micButton = button
-        val pad = (12 * density).toInt()
         strip.addView(
-            button, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            button,
+            LinearLayout.LayoutParams(0, (52 * density).toInt(), 1f).apply {
                 setMargins(pad, pad, pad, pad)
+            }
+        )
+        // Escape hatches. Without these, choosing Sokhan hides the user's real
+        // keyboard with no way back — the reported "not usable on mobile".
+        val switchKey = Button(this).apply {
+            text = context.getString(R.string.ime_switch)
+            isAllCaps = false
+            setTextColor(0xFFE6F4F1.toInt())
+            setOnClickListener {
+                if (!switchToNextInputMethod(false)) showInputMethodPicker()
+            }
+            setOnLongClickListener {
+                showInputMethodPicker()
+                true
+            }
+        }
+        strip.addView(
+            switchKey,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (52 * density).toInt()).apply {
+                setMargins(0, pad, pad, pad)
+            }
+        )
+        val hideKey = Button(this).apply {
+            text = context.getString(R.string.ime_hide)
+            isAllCaps = false
+            setTextColor(0xFFE6F4F1.toInt())
+            setOnClickListener { requestHideSelf(0) }
+        }
+        strip.addView(
+            hideKey,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, (52 * density).toInt()).apply {
+                setMargins(0, pad, pad, pad)
             }
         )
         refreshButton()

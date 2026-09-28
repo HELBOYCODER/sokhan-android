@@ -75,10 +75,33 @@ class SokhanAccessibilityService : AccessibilityService() {
 
         val img = ImageView(this)
         img.setImageResource(R.drawable.overlay_idle)
+
+        // Desktop listening indicator: a 7 px pulsing dot beside the meter.
+        val dot = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(0xFF5EEAD4.toInt())
+            }
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                (7 * density).toInt(), (7 * density).toInt()
+            )
+            visibility = View.GONE
+        }
         val wave = WaveView(this)
         wave.layoutParams = android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, size
         )
+        // Desktop transcribing indicator: a 13 px 2 px-stroke spinner, so the
+        // lips icon no longer has to rotate as a stand-in.
+        val spinner = android.widget.ProgressBar(
+            this, android.R.attr.progressBarStyleSmall
+        ).apply {
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF5EEAD4.toInt())
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                (18 * density).toInt(), (18 * density).toInt()
+            )
+            visibility = View.GONE
+        }
         val caption = android.widget.TextView(this).apply {
             setTextColor(0xFFE6F4F1.toInt())
             textSize = 14f
@@ -93,15 +116,19 @@ class SokhanAccessibilityService : AccessibilityService() {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        row.addView(dot)
         row.addView(wave)
+        row.addView(spinner)
         row.addView(img, android.widget.LinearLayout.LayoutParams(size, size))
 
         val root = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             gravity = Gravity.END
         }
-        root.addView(caption)
+        // Button row first: adding the caption above made the window grow downward
+        // and the button jumped mid-recording the moment the first caption landed.
         root.addView(row)
+        root.addView(caption)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -141,10 +168,14 @@ class SokhanAccessibilityService : AccessibilityService() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (dragging) {
-                        // Keep the button fully on screen, then remember the spot.
+                        // Clamp against the window's actual size: the row is wider
+                        // than the button once the meter and spinner are showing,
+                        // so clamping by the button size let it park off-screen.
                         val dm = resources.displayMetrics
-                        params.x = params.x.coerceIn(0, dm.widthPixels - size)
-                        params.y = params.y.coerceIn(0, dm.heightPixels - size)
+                        val w = if (root.width > 0) root.width else size
+                        val h = if (root.height > 0) root.height else size
+                        params.x = params.x.coerceIn(0, dm.widthPixels - w)
+                        params.y = params.y.coerceIn(0, dm.heightPixels - h)
                         wm.updateViewLayout(root, params)
                         SessionManager.setOverlayPosition(this@SokhanAccessibilityService, params.x, params.y)
                     } else {
@@ -167,13 +198,16 @@ class SokhanAccessibilityService : AccessibilityService() {
                     }
                 )
                 img.scaleX = 1f; img.scaleY = 1f; img.rotation = 0f
-                wave.visibility = if (state is SessionManager.State.Recording) View.VISIBLE else View.GONE
-                // Match the desktop rhythm: 1.9 s listening pulse (sdot-pulse),
-                // 0.7 s linear spin while the request is in flight (sspin).
-                indicator = when (state) {
-                    SessionManager.State.Recording -> pulse(img, 1900L)
-                    SessionManager.State.Transcribing -> spin(img, 700L)
-                    SessionManager.State.Idle -> null
+                val recording = state is SessionManager.State.Recording
+                val working = state is SessionManager.State.Transcribing
+                dot.visibility = if (recording) View.VISIBLE else View.GONE
+                wave.visibility = if (recording) View.VISIBLE else View.GONE
+                spinner.visibility = if (working) View.VISIBLE else View.GONE
+                // Desktop rhythm: the dot pulses on sdot-pulse (1.9 s) while
+                // listening; the spinner itself runs sspin while transcribing.
+                indicator = when {
+                    recording -> pulse(dot, 1900L)
+                    else -> null
                 }
             }
         }
@@ -190,7 +224,7 @@ class SokhanAccessibilityService : AccessibilityService() {
             }
         }
         serviceScope.launch {
-            SessionManager.micLevel.collect { wave.setLevel(it) }
+            SessionManager.audioBands.collect { wave.setBands(it) }
         }
 
         wm.addView(root, params)
@@ -212,15 +246,6 @@ class SokhanAccessibilityService : AccessibilityService() {
         return a
     }
 
-    private fun spin(view: android.view.View, periodMs: Long): android.animation.ValueAnimator {
-        val a = android.animation.ValueAnimator.ofFloat(0f, 360f)
-        a.duration = periodMs
-        a.repeatCount = android.animation.ValueAnimator.INFINITE
-        a.interpolator = android.view.animation.LinearInterpolator()
-        a.addUpdateListener { view.rotation = it.animatedValue as Float }
-        a.start()
-        return a
-    }
 
     private fun removeOverlay() {
         indicator?.cancel()

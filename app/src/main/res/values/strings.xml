@@ -32,6 +32,8 @@
     <string name="empty_result">صدایی شنیده نشد</string>
 
     <string name="ime_label">سخن — دیکته</string>
+    <string name="ime_switch">کیبورد</string>
+    <string name="ime_hide">پنهان</string>
     <string name="ime_listen">🎤 گوش بده</string>
     <string name="ime_stop">⏹ پایان</string>
     <string name="ime_working">در حال تبدیل…</string>

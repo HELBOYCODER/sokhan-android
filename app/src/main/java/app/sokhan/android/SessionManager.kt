@@ -31,16 +31,16 @@ object SessionManager {
     private val _liveText = MutableStateFlow(StreamText("", ""))
     val liveText: StateFlow<StreamText> = _liveText
 
-    /** Smoothed mic level 0..1 driving the overlay waveform. */
-    private val _micLevel = MutableStateFlow(0f)
-    val micLevel: StateFlow<Float> = _micLevel
+    /** Per-band mic energy driving the overlay spectrum meter (0..1 per band). */
+    private val _bands = MutableStateFlow(FloatArray(AudioBands.BIN_COUNT))
+    val audioBands: StateFlow<FloatArray> = _bands
 
     fun setLiveText(text: StreamText) {
         _liveText.value = text
     }
 
-    fun setMicLevel(level: Float) {
-        _micLevel.value = level.coerceIn(0f, 1f)
+    fun setAudioBands(bands: FloatArray) {
+        _bands.value = bands
     }
 
     /** Set when an FGS start was blocked and must be retried from the foreground UI. */
@@ -111,22 +111,14 @@ object SessionManager {
             toast(context, R.string.mic_needed)
             return
         }
-        // Refuse before capturing any audio when there is nowhere to type. Either
-        // route counts: the active keyboard (live typing) or a paste-capable field.
-        val service = SokhanAccessibilityService.instance
-        val canTypeLive = LiveTyper.imeAvailable()
-        if (!canTypeLive) {
-            when {
-                service == null -> {
-                    toast(context, R.string.no_service)
-                    return
-                }
-                !service.hasPasteTarget() -> {
-                    toast(context, R.string.no_field)
-                    return
-                }
-            }
+        if (SokhanAccessibilityService.instance == null) {
+            toast(context, R.string.no_service)
+            return
         }
+        // Never probe the accessibility tree here: walking it costs one binder call per
+        // child and runs on the tap thread, which is what made the button feel dead and
+        // refused legitimate fields. Start straight away and decide where the text goes
+        // once it exists (see InsertPlanner).
         if (tryStart(context)) return
         // Background FGS start blocked (our service is system-bound, so this is
         // rare, but some OEMs differ) — retry from the foreground UI.
@@ -160,7 +152,7 @@ object SessionManager {
     internal fun finishWith(text: String?) {
         if (text != null) _lastResult.value = text
         _liveText.value = StreamText("", "")
-        _micLevel.value = 0f
+        _bands.value = FloatArray(AudioBands.BIN_COUNT)
         _state.value = State.Idle
     }
 }

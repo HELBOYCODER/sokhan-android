@@ -213,36 +213,42 @@ class RecordingService : Service() {
     }
 
     /**
-     * Get the transcript into the field. If Sokhan was the active keyboard the
-     * text was already typed live word-by-word; otherwise commit it through the
-     * input connection in one shot, falling back to the accessibility paste.
+     * Get the transcript into the field. If Sokhan was the active keyboard the text
+     * was already typed word-by-word; otherwise flush whatever LiveTyper still holds,
+     * then commit through the input connection, then the accessibility paste, then
+     * leave it on the clipboard. The accessibility tree is walked here — after the
+     * text exists — never on the tap thread.
      */
     private fun insertFinal(text: String) {
         if (LiveTyper.isFullyTyped(text)) return
-        val typed = LiveTyper.finish(text)
-        if (typed == text) return
+        if (LiveTyper.finish(text) == text) return
         val ime = SokhanInputMethod.instance
-        val ok = if (ime != null && ime.imeReady) {
-            ime.pasteViaConnection(text)
-        } else {
-            false
+        val imeReady = ime != null && ime.imeReady
+        val pasteOk = !imeReady &&
+            (SokhanAccessibilityService.instance?.hasPasteTarget() ?: false)
+        val routed = InsertPlanner.route(
+            fullyTypedLive = false, imeConnected = imeReady, pasteTargetFound = pasteOk
+        )
+        val inserted = when (routed) {
+            InsertRoute.ImeConnection -> ime!!.pasteViaConnection(text)
+            InsertRoute.AccessibilityPaste ->
+                SokhanAccessibilityService.instance?.insertText(text) == true
+            else -> false
         }
-        if (!ok) {
-            val inserted = SokhanAccessibilityService.instance?.insertText(text) ?: false
-            if (!inserted) showToast(getString(R.string.insert_failed))
-        }
+        if (!inserted) notifyNotInserted()
     }
 
-    /** Convert one block to f32, publish its mic level, and push it to the live session. */
+    /** insertText already leaves the transcript on the clipboard; guarantee it anyway. */
+    private fun notifyNotInserted() {
+        val copied = SokhanAccessibilityService.instance != null
+        showToast(getString(if (copied) R.string.insert_failed else R.string.no_field))
+    }
+
+    /** Convert one block to f32, publish its spectrum, and push it to the live session. */
     private suspend fun feedLive(session: SdaSession, piece: ShortArray) {
         val floats = FloatArray(piece.size)
-        var sum = 0.0
-        for (i in piece.indices) {
-            val s = piece[i] / 32768f
-            floats[i] = s
-            sum += s.toDouble() * s.toDouble()
-        }
-        SessionManager.setMicLevel(Math.sqrt(sum / piece.size).toFloat() * 8f)
+        for (i in piece.indices) floats[i] = piece[i] / 32768f
+        SessionManager.setAudioBands(AudioBands.bands(floats, SAMPLE_RATE))
         session.feed(floats)
     }
 
