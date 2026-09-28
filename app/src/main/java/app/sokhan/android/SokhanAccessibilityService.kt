@@ -135,7 +135,7 @@ class SokhanAccessibilityService : AccessibilityService() {
                         dragging = true
                         params.x = downPX + dx.toInt()
                         params.y = downPY + dy.toInt()
-                        wm.updateViewLayout(root, params)
+                        updateOverlayLayout(wm, root, params)
                     }
                     true
                 }
@@ -145,8 +145,9 @@ class SokhanAccessibilityService : AccessibilityService() {
                         val dm = resources.displayMetrics
                         params.x = params.x.coerceIn(0, dm.widthPixels - size)
                         params.y = params.y.coerceIn(0, dm.heightPixels - size)
-                        wm.updateViewLayout(root, params)
-                        SessionManager.setOverlayPosition(this@SokhanAccessibilityService, params.x, params.y)
+                        if (updateOverlayLayout(wm, root, params)) {
+                            SessionManager.setOverlayPosition(this@SokhanAccessibilityService, params.x, params.y)
+                        }
                     } else {
                         SessionManager.toggle(this)
                     }
@@ -193,8 +194,9 @@ class SokhanAccessibilityService : AccessibilityService() {
             SessionManager.micLevel.collect { wave.setLevel(it) }
         }
 
-        wm.addView(root, params)
-        overlay = root
+        if (addOverlay(wm, root, params)) {
+            overlay = root
+        }
     }
 
     /** Scale "breathing" used for the listening state. */
@@ -222,11 +224,50 @@ class SokhanAccessibilityService : AccessibilityService() {
         return a
     }
 
+    private fun addOverlay(
+        wm: WindowManager,
+        view: View,
+        params: WindowManager.LayoutParams,
+    ): Boolean = try {
+        wm.addView(view, params)
+        true
+    } catch (_: RuntimeException) {
+        windowManager = null
+        false
+    }
+
+    private fun updateOverlayLayout(
+        wm: WindowManager,
+        view: View,
+        params: WindowManager.LayoutParams,
+    ): Boolean {
+        if (!view.isAttachedToWindow) return false
+        return try {
+            wm.updateViewLayout(view, params)
+            true
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
     private fun removeOverlay() {
         indicator?.cancel()
         indicator = null
-        overlay?.let { windowManager?.removeView(it) }
+        overlay?.let { view ->
+            if (view.isAttachedToWindow) {
+                try {
+                    windowManager?.removeView(view)
+                } catch (_: IllegalArgumentException) {
+                    // The window can already be detached during service teardown.
+                } catch (_: RuntimeException) {
+                    // OEM window managers occasionally throw here; the service is ending anyway.
+                }
+            }
+        }
         overlay = null
+        windowManager = null
     }
 
     /**
