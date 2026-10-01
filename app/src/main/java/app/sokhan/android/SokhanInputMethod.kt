@@ -93,10 +93,10 @@ class SokhanInputMethod : InputMethodService() {
             isAllCaps = false
             setTextColor(0xFFE6F4F1.toInt())
             setOnClickListener {
-                if (!switchToNextInputMethod(false)) showInputMethodPicker()
+                if (!switchToNextInputMethod(false)) showPicker()
             }
             setOnLongClickListener {
-                showInputMethodPicker()
+                showPicker()
                 true
             }
         }
@@ -144,5 +144,11 @@ class SokhanInputMethod : InputMethodService() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** InputMethodService.showInputMethodPicker() exists only from API 33. */
+    private fun showPicker() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.showInputMethodPicker()
     }
 }

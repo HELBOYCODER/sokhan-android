@@ -87,7 +87,11 @@ object SessionManager {
             // If the service died without telling us, recover instead of wedging.
             State.Recording -> RecordingService.instance?.stopCapture()
                 ?: run { _state.value = State.Idle }
-            State.Transcribing -> Unit // already finishing; ignore taps
+            // A dead service can never deliver a transcript: finishWith() died with
+            // its scope, so a stale Transcribing state must also recover here, or
+            // the button stays locked on "Transcribing…" forever.
+            State.Transcribing ->
+                if (RecordingService.instance == null) _state.value = State.Idle
         }
     }
 

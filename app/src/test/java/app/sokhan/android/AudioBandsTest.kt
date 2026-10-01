@@ -44,8 +44,10 @@ class AudioBandsTest {
 
     @Test
     fun louder_input_drives_a_stronger_response() {
-        val soft = peak(AudioBands.bands(tone(1_000.0, amplitude = 0.05), sr))
-        val loud = peak(AudioBands.bands(tone(1_000.0, amplitude = 0.5), sr))
+        // Compare the peak magnitudes, not band indices — a fixed tone lights the
+        // same band at every amplitude, so indices are equal by construction.
+        val soft = AudioBands.bands(tone(1_000.0, amplitude = 0.05), sr).max()
+        val loud = AudioBands.bands(tone(1_000.0, amplitude = 0.5), sr).max()
         assertTrue("expected $loud > $soft", loud > soft)
     }
 

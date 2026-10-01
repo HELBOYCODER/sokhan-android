@@ -93,9 +93,7 @@ class SokhanAccessibilityService : AccessibilityService() {
         )
         // Desktop transcribing indicator: a 13 px 2 px-stroke spinner, so the
         // lips icon no longer has to rotate as a stand-in.
-        val spinner = android.widget.ProgressBar(
-            this, android.R.attr.progressBarStyleSmall
-        ).apply {
+        val spinner = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleSmall).apply {
             indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF5EEAD4.toInt())
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 (18 * density).toInt(), (18 * density).toInt()

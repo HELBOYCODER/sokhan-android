@@ -220,10 +220,19 @@ private fun ImeCard() {
     }
 }
 
-private fun isImeEnabled(context: Context): Boolean =
-    android.provider.Settings.Secure.getString(
-        context.contentResolver, "enabled_input_methods"
-    )?.contains("app.sokhan.android/.SokhanInputMethod") == true
+private fun isImeEnabled(context: Context): Boolean {
+    // Reading Settings.Secure "enabled_input_methods" throws SecurityException on
+    // targetSdk 34+; the proper API is the input-methods manager.
+    return try {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE)
+            as android.view.inputmethod.InputMethodManager
+        imm.enabledInputMethodList.any {
+            it.packageName == context.packageName
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
 
 @Composable
 private fun LanguageCard() {

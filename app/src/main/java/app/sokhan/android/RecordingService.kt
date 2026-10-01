@@ -303,6 +303,9 @@ class RecordingService : Service() {
         audioRecord?.release()
         audioRecord = null
         scope.cancel()
+        // The cancelled recordAndTranscribe coroutine can no longer reach
+        // finishWith(); without this the overlay stays wedged in Transcribing.
+        SessionManager.finishWith(null)
         super.onDestroy()
     }
 }
