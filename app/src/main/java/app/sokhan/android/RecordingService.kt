@@ -112,6 +112,24 @@ class RecordingService : Service() {
         stopRequested = true
     }
 
+    /**
+     * Immediate abort of a stalled session (e.g. the network dropped mid-speech
+     * and transcription is hanging). Cancels the whole recording coroutine —
+     * which aborts the HTTP session and releases the mic — and returns the
+     * button to Idle so the very next tap starts a fresh recording.
+     */
+    fun cancelSession() {
+        stopRequested = true
+        audioJob?.cancel()
+        audioJob = null
+        liveSession?.cancel()
+        liveSession = null
+        audioRecord?.release()
+        audioRecord = null
+        SessionManager.finishWith(null)
+        stopSelf()
+    }
+
     private suspend fun recordAndTranscribe() {
         val language = SessionManager.language
         val chunks = ArrayList<ShortArray>()

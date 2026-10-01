@@ -37,6 +37,9 @@
     <string name="ime_listen">🎤 گوش بده</string>
     <string name="ime_stop">⏹ پایان</string>
     <string name="ime_working">در حال تبدیل…</string>
+    <string name="ime_status_idle">برای دیکته، دکمه را بزنید و حرف بزنید</string>
+    <string name="ime_status_recording">در حال شنیدن… برای پایان دوباره بزنید</string>
+    <string name="ime_status_working">در حال تبدیل گفتار به نوشتار…</string>
     <string name="ime_card_title">صفحه‌کلید سخن (تایپ زنده)</string>
     <string name="ime_status_on">صفحه‌کلید سخن فعال است — متن همان لحظه تایپ می‌شود</string>
     <string name="ime_status_off">برای تایپ لحظه‌ای، «سخن» را از صفحه‌کلیدها انتخاب کنید</string>

@@ -37,6 +37,8 @@ private class SessionState {
     var earlyDownClose: Boolean = false
     var statusError: Int? = null
     var upError: String? = null
+    /** Last time ANY /down traffic arrived — the liveness signal for the watchdog. */
+    var streamActivityAt: Long = 0
 }
 
 /**
@@ -175,6 +177,7 @@ class SdaSession(
         var text: String? = null
         var error: String? = null
         var deadline = 0L
+        var lastProgressAt = 0L
         loop@ while (true) {
             delay(150)
             synchronized(state) {
@@ -185,7 +188,17 @@ class SdaSession(
                 }
                 if (!state.finishRequested) return@synchronized
                 val now = System.currentTimeMillis()
-                if (deadline == 0L) deadline = now + MAX_WAIT_MS
+                if (deadline == 0L) {
+                    deadline = now + MAX_WAIT_MS
+                    lastProgressAt = now
+                }
+                // Stalled-stream watchdog: if nothing at all arrives (no finals,
+                // no stream close — the signature of a dead connection) for half
+                // the session deadline, fail fast instead of hanging until the
+                // full timeout with a silent, unresponsive button.
+                val progress = maxOf(state.lastFinalAt, state.streamActivityAt)
+                if (progress > lastProgressAt) lastProgressAt = now
+                val stalled = now - lastProgressAt > MAX_WAIT_MS / 2
                 val hasFinal = state.committed.isNotEmpty()
                 val quiet = state.lastFinalAt in 1..(now - QUIET_PERIOD_MS)
                 if (state.downClosed || (hasFinal && quiet)) {
@@ -196,6 +209,8 @@ class SdaSession(
                         val status = state.statusError
                         if (status != null && status != SDA_STATUS_NO_SPEECH) error = "service status $status"
                     }
+                } else if (stalled) {
+                    error = "connection stalled — no response from the speech service"
                 } else if (now > deadline) {
                     text = state.committed
                 }
@@ -241,6 +256,7 @@ class SdaSession(
                         return
                     }
                     val message = source.readByteArray(len.toLong())
+                    synchronized(state) { state.streamActivityAt = System.currentTimeMillis() }
                     val event = parseEvent(message) ?: continue
                     synchronized(state) { applyEvent(event) }
                 }
