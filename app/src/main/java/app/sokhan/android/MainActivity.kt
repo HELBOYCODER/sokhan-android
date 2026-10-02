@@ -101,8 +101,6 @@ fun SokhanScreen() {
 
             PermissionCard()
 
-            AccessibilityCard()
-            Spacer(Modifier.height(14.dp))
             ImeCard()
             Spacer(Modifier.height(14.dp))
             LanguageCard()
@@ -165,34 +163,6 @@ private fun SokhanCard(title: String, content: @Composable () -> Unit) {
         Text(title, color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         content()
-    }
-}
-
-@Composable
-private fun AccessibilityCard() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // The overlay can only change while we are away in the accessibility
-    // settings, so refresh on resume rather than polling in a loop.
-    var enabled by remember { mutableStateOf(SokhanAccessibilityService.instance != null) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        enabled = SokhanAccessibilityService.instance != null
-    }
-    SokhanCard("دکمه لب شناور (اختیاری)") {
-        Text(
-            if (enabled) "سرویس فعال است — دکمه لب روی صفحه است"
-            else "برای دیکته در هر اپ بدون کیبورد سخن، «سخن» را در دسترسی‌پذیری فعال کنید — برای تایپ صوتی با صفحه‌کلید لازم نیست",
-            color = if (enabled) Teal else TextMain, fontSize = 14.sp
-        )
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = {
-                context.startActivity(
-                    android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = OnPink)
-        ) { Text("تنظیمات دسترسی‌پذیری") }
     }
 }
 
@@ -299,7 +269,7 @@ private fun StatusCard() {
     SokhanCard("وضعیت") {
         Text(
             when (state) {
-                SessionManager.State.Idle -> "آماده — روی دکمه لب بزنید"
+                SessionManager.State.Idle -> "آماده — دکمه «گوش بده» را بزنید"
                 SessionManager.State.Recording -> "در حال ضبط… برای پایان دوباره بزنید"
                 SessionManager.State.Transcribing -> "در حال تبدیل گفتار به نوشتار…"
             },
@@ -327,12 +297,11 @@ private fun GuideCard() {
     SokhanCard("راهنما") {
         Text(
             "۱. «صفحه‌کلید سخن» را از فهرست صفحه‌کلیدها فعال و انتخاب کنید — " +
-                "برای تایپ صوتی، دسترسی‌پذیری لازم نیست.\n" +
+                "برای تایپ صوتی، هیچ دسترسی خاصی لازم نیست.\n" +
                 "۲. هرجا فیلد متنی باز شد، دکمه «گوش بده» را بزنید و صحبت کنید؛ " +
                 "متن همان لحظه در فیلد تایپ می‌شود.\n" +
                 "۳. دوباره بزنید تا ضبط پایان یابد.\n" +
-                "۴. (اختیاری) سرویس دسترسی‌پذیری فقط برای دکمه لب شناور است — " +
-                "دکمه‌ای که در هر اپی دیکته می‌کند، حتی وقتی صفحه‌کلید سخن فعال نیست.",
+                "۴. اگه کیبورد را عوض کردید، آخرین متن روی کلیپ‌بورد باقی می‌ماند.",
             color = TextMain, fontSize = 14.sp
         )
     }

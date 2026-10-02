@@ -17,8 +17,6 @@ object SessionManager {
     private const val PREFS = "sokhan"
     private const val KEY_LANGUAGE = "language"
     private const val KEY_HALFSPACE = "fa_halfspace"
-    private const val KEY_OVERLAY_X = "overlay_x"
-    private const val KEY_OVERLAY_Y = "overlay_y"
     private const val DEFAULT_LANGUAGE = "fa-IR"
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -67,17 +65,6 @@ object SessionManager {
         prefs(context).edit().putBoolean(KEY_HALFSPACE, value).apply()
     }
 
-    /** Last dragged position of the floating button, or null for the default. */
-    fun overlayPosition(context: Context): Pair<Int, Int>? {
-        val p = prefs(context)
-        if (!p.contains(KEY_OVERLAY_X) || !p.contains(KEY_OVERLAY_Y)) return null
-        return p.getInt(KEY_OVERLAY_X, 0) to p.getInt(KEY_OVERLAY_Y, 0)
-    }
-
-    fun setOverlayPosition(context: Context, x: Int, y: Int) {
-        prefs(context).edit().putInt(KEY_OVERLAY_X, x).putInt(KEY_OVERLAY_Y, y).apply()
-    }
-
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -112,25 +99,15 @@ object SessionManager {
     private fun start(context: Context) {
         // Without RECORD_AUDIO the recorder cannot initialise and the button just
         // looks dead; say so up front rather than failing deep inside AudioRecord.
+        // This is the only permission a voice keyboard needs, matching the stock
+        // Google keyboard's voice-typing model.
         if (!hasMicrophonePermission(context)) {
             toast(context, R.string.mic_needed)
             return
         }
-        // Accessibility is only ONE of the two insertion routes and never a
-        // prerequisite. When Sokhan is the active keyboard, typing happens
-        // entirely through the InputConnection (LiveTyper) — a standard IME
-        // capability that needs no special access. Only fall back to the
-        // accessibility-paste requirement when there is no editor connection
-        // (i.e. dictating from the floating overlay into a foreign app).
-        val imeTypingAvailable = SokhanInputMethod.instance?.imeReady == true
-        if (!imeTypingAvailable && SokhanAccessibilityService.instance == null) {
-            toast(context, R.string.no_service)
-            return
-        }
-        // Never probe the accessibility tree here: walking it costs one binder call per
-        // child and runs on the tap thread, which is what made the button feel dead and
-        // refused legitimate fields. Start straight away and decide where the text goes
-        // once it exists (see InsertPlanner).
+        // Sokhan is a keyboard-first feature: recording starts right away and the
+        // transcript goes wherever the input connection points. No accessibility
+        // probe here — it used to block the whole feature behind a special service.
         if (tryStart(context)) return
         // Background FGS start blocked (our service is system-bound, so this is
         // rare, but some OEMs differ) — retry from the foreground UI.

@@ -1,34 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">سخن</string>
-    <string name="accessibility_description">سخن: دکمه لب روی صفحه برای تبدیل گفتار به نوشتار در هر برنامه‌ای</string>
 
     <string name="subtitle">تبدیل گفتار به نوشتار</string>
-    <string name="access_status_on">سرویس دسترسی‌پذیری فعال است</string>
-    <string name="access_status_off">سرویس دسترسی‌پذیری غیرفعال است</string>
-    <string name="open_access_settings">باز کردن تنظیمات دسترسی‌پذیری</string>
-    <string name="access_hint">برای نمایش دکمه لب، «سخن» را در تنظیمات دسترسی‌پذیری فعال کنید.</string>
 
     <string name="language_title">زبان تشخیص گفتار</string>
 
     <string name="guide_title">راهنما</string>
-    <string name="guide_steps">۱. سرویس دسترسی‌پذیری را فعال کنید.\n۲. دکمه لب روی صفحه ظاهر می‌شود؛ با کشیدن جابه‌جا شود.\n۳. هرجا می‌خواهید تایپ کنید، روی دکمه بزنید و حرف بزنید.\n۴. دوباره بزنید تا ضبط پایان یابد؛ متن خودکار تایپ می‌شود.</string>
 
     <string name="last_result">آخرین نتیجه</string>
-    <string name="state_recording">در حال ضبط… برای پایان، دکمه لب را بزنید</string>
+    <string name="state_recording">در حال ضبط… برای پایان، دوباره دکمه را بزنید</string>
     <string name="state_transcribing">در حال تبدیل گفتار به نوشتار…</string>
 
     <string name="rec_notif_title">سخن در حال ضبط است</string>
-    <string name="rec_notif_text">برای پایان ضبط، دکمه لب را بزنید</string>
+    <string name="rec_notif_text">برای پایان ضبط، دوباره دکمه را بزنید</string>
     <string name="action_stop">پایان</string>
     <string name="action_cancel">لغو</string>
 
-    <string name="insert_failed">متن در کلیپ‌بورد کپی شد؛ در محل تایپ بچسبانید</string>
     <string name="record_failed">خطا در تبدیل گفتار: %1$s</string>
     <string name="max_duration">ضبط به حداکثر طول رسید و پایان یافت</string>
     <string name="mic_needed">برای ضبط، اجازه میکروفون لازم است</string>
-    <string name="no_service">سرویس دسترسی‌پذیری فعال نیست</string>
-    <string name="no_field">اینجا کادر متنی نیست — اول در یک کادر تایپ بزنید</string>
+    <string name="no_field">اینجا کادر متنی نیست — متن روی کلیپ‌بورد کپی شد</string>
     <string name="empty_result">صدایی شنیده نشد</string>
 
     <string name="ime_label">سخن — دیکته</string>
