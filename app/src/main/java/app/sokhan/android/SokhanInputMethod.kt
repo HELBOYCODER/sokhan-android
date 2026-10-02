@@ -97,6 +97,57 @@ class SokhanInputMethod : InputMethodService() {
         return s
     }
 
+    // ── Live editing keys ────────────────────────────────────────────────────
+    // Every edit goes straight into the focused field through the input
+    // connection, so the user can grow and shrink the dictated text without
+    // leaving the keyboard. Manual edits invalidate the LiveTyper mirror: the
+    // next recognition delta is re-synced from what is actually in the editor,
+    // not from a stale count.
+
+    fun commitSpace() {
+        LiveTyper.onManualEdit()
+        currentInputConnection?.commitText(" ", 1)
+    }
+
+    fun commitEnter() {
+        LiveTyper.onManualEdit()
+        val ic = currentInputConnection ?: return
+        val info = currentInputEditorInfo
+        val action = info?.imeOptions?.and(EditorInfo.IME_MASK_ACTION) ?: 0
+        // Honor the field's action (search/send/next) before falling back to a
+        // newline — standard IME behavior.
+        if (!ic.performEditorAction(action.takeIf { it != EditorInfo.IME_ACTION_NONE }
+            ?: EditorInfo.IME_ACTION_UNSPECIFIED)) {
+            ic.commitText("\n", 1)
+        }
+    }
+
+    /**
+     * Delete [count] characters before the cursor. Long-pressing backspace
+     * repeats this fast (handled by the key's repeat logic below).
+     */
+    fun deleteBackward(count: Int) {
+        LiveTyper.onManualEdit()
+        currentInputConnection?.deleteSurroundingText(count, 0)
+    }
+
+    /** Long-press backspace: delete the whole word before the cursor. */
+    fun deleteWord() {
+        LiveTyper.onManualEdit()
+        val ic = currentInputConnection ?: return
+        try {
+            val before = ic.getTextBeforeCursor(64, 0) ?: ""
+            var cut = 0
+            // Skip any spaces directly before the cursor, then the word itself.
+            while (cut < before.length && before[before.length - 1 - cut] == ' ') cut++
+            while (cut < before.length && before[before.length - 1 - cut] != ' ') cut++
+            if (cut > 0) ic.deleteSurroundingText(cut, 0)
+        } catch (_: Exception) {
+            // Field changed under us — single-char delete is the safe fallback.
+            ic.deleteSurroundingText(1, 0)
+        }
+    }
+
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
@@ -150,6 +201,100 @@ class SokhanInputMethod : InputMethodService() {
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
+        )
+
+        // ── Edit row: space / backspace / enter ─────────────────────────────
+        // The user must be able to grow and shrink the dictated text live —
+        // basic keyboard UX, applied directly to the focused field.
+        fun keyText(label: String): Button = Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 15f
+            stateListAnimator = null
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(14).toFloat()
+                setColor(SURFACE)
+                setStroke(dp(1), TEXT_DIM)
+            }
+            setTextColor(TEXT)
+        }
+
+        val editRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(8), dp(4))
+        }
+        column.addView(
+            editRow,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val spaceKey = keyText("␣ Space").apply {
+            setOnClickListener { commitSpace() }
+        }
+        editRow.addView(
+            spaceKey,
+            LinearLayout.LayoutParams(0, dp(KEY_DP), 2f).apply { setMargins(dp(4), 0, dp(4), 0) }
+        )
+        val enterKey = keyText("↵ Enter").apply {
+            setOnClickListener { commitEnter() }
+        }
+        editRow.addView(
+            enterKey,
+            LinearLayout.LayoutParams(0, dp(KEY_DP), 1f).apply { setMargins(dp(4), 0, dp(4), 0) }
+        )
+        val backspaceKey = keyText("⌫").apply {
+            // Tap: one character. Hold: delete the whole word, then keep
+            // repeating single characters while held (standard keyboard feel).
+            // Implemented entirely with touch events — onClick + OnLongClick +
+            // OnTouch together double-fire and leak the repeat loop. The repeat
+            // loop also re-checks `pressed`, so a slow device (where the touch
+            // UP can arrive well after the long-press delay) still stops the
+            // moment the finger lifts instead of wiping the field.
+            var repeat: Runnable? = null
+            var pressed = false
+            var longFired = false
+            setOnTouchListener { v, ev ->
+                when (ev.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        pressed = true
+                        longFired = false
+                        postDelayed({
+                            if (pressed && !longFired) {
+                                longFired = true
+                                deleteWord()
+                                repeat = object : Runnable {
+                                    override fun run() {
+                                        if (!pressed) return
+                                        deleteBackward(1)
+                                        postDelayed(this, 60L)
+                                    }
+                                }
+                                postDelayed(repeat!!, 150)
+                            }
+                        }, 500)
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        pressed = false
+                        repeat?.let { removeCallbacks(it) }
+                        repeat = null
+                        // Plain tap (long-press never fired): delete one char.
+                        if (!longFired) deleteBackward(1)
+                        longFired = true
+                        v.performClick()
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
+        editRow.addView(
+            backspaceKey,
+            LinearLayout.LayoutParams(0, dp(KEY_DP), 1f).apply { setMargins(dp(4), 0, dp(4), 0) }
         )
 
         fun key(label: Int): Button = Button(this).apply {

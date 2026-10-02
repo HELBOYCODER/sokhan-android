@@ -30,6 +30,25 @@ object LiveTyper {
     /** True when the whole of [text] is already in the editor. */
     fun isFullyTyped(text: String): Boolean = typed == text
 
+    /**
+     * A manual edit (space/backspace/enter key) just touched the editor. The
+     * mirror of what was typed is now stale: reset it so the next recognition
+     * delta re-syncs from the editor's actual content instead of appending onto
+     * a wrong offset (which duplicated or swallowed text after an edit).
+     */
+    fun onManualEdit() {
+        main.post {
+            val ic = SokhanInputMethod.instance?.currentInputConnection
+            typed = if (ic != null) {
+                // Keep the tail of the editor as the new baseline: finals are
+                // appended, so matching the actual suffix is enough for the
+                // prefix check in updateOnMain to re-sync correctly.
+                ic.getTextBeforeCursor(1024, 0)?.toString() ?: ""
+            } else ""
+            lastTentative = ""
+        }
+    }
+
     fun imeAvailable(): Boolean = SokhanInputMethod.instance?.imeReady == true
 
     fun update(text: StreamText) = main.post { updateOnMain(text) }
