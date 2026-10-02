@@ -24,6 +24,8 @@
     <string name="empty_result">No speech was heard</string>
 
     <string name="ime_label">Sokhan — dictation</string>
+    <string name="ime_translate_on">Live translation on — English output</string>
+    <string name="ime_translate_off">Live translation off</string>
     <string name="ime_switch">Keyboard</string>
     <string name="ime_hide">Hide</string>
     <string name="ime_listen">🎤 Listen</string>

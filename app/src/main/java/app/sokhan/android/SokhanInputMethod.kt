@@ -49,6 +49,7 @@ class SokhanInputMethod : InputMethodService() {
     }
 
     private var micButton: Button? = null
+    private var translateKey: Button? = null
     private var statusLine: TextView? = null
     private var pulse: ValueAnimator? = null
 
@@ -337,12 +338,21 @@ class SokhanInputMethod : InputMethodService() {
 
         // Escape hatches. Without these, choosing Sokhan hides the user's real
         // keyboard with no way back — the reported "not usable on mobile".
+        // Tap: next input method. Long-press: the system's keyboard settings,
+        // so enabling/reordering keyboards happens without leaving the editor.
         val switchKey = key(R.string.ime_switch).apply {
             setOnClickListener {
                 if (!switchToNextInputMethod(false)) showPicker()
             }
             setOnLongClickListener {
-                showPicker()
+                try {
+                    startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (_: Exception) {
+                    showPicker() // no settings activity on this ROM — picker still works
+                }
                 true
             }
         }
@@ -352,6 +362,28 @@ class SokhanInputMethod : InputMethodService() {
                 setMargins(dp(4), 0, dp(4), 0)
             }
         )
+
+        // Live Google translation: dictation output lands in English instead of
+        // the spoken language. A toggle, not a mode — the green fill shows it is
+        // armed, and it survives until tapped again (preference-persisted).
+        translateKey = keyText("EN ⇄").apply {
+            setOnClickListener {
+                val on = !SessionManager.translateToEn
+                SessionManager.setTranslateToEn(this@SokhanInputMethod, on)
+                styleTranslateKey(this, on)
+                statusLine?.text = getString(
+                    if (on) R.string.ime_translate_on else R.string.ime_translate_off
+                )
+            }
+        }
+        styleTranslateKey(translateKey!!, SessionManager.translateToEn)
+        row.addView(
+            translateKey,
+            LinearLayout.LayoutParams(0, dp(KEY_DP), 1f).apply {
+                setMargins(dp(4), 0, dp(4), 0)
+            }
+        )
+
         val hideKey = key(R.string.ime_hide).apply {
             setOnClickListener { requestHideSelf(0) }
         }
@@ -363,6 +395,18 @@ class SokhanInputMethod : InputMethodService() {
         )
         refreshButton()
         return root
+    }
+
+    /** Armed = solid green (active state must be readable at a glance). */
+    private fun styleTranslateKey(b: Button, on: Boolean) {
+        val density = resources.displayMetrics.density
+        b.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = (14 * density).toFloat()
+            setColor(if (on) PINK else SURFACE)
+            setStroke((1 * density).toInt(), if (on) PINK else TEXT_DIM)
+        }
+        b.setTextColor(if (on) ON_PINK else TEXT)
     }
 
     private fun refreshButton() {
