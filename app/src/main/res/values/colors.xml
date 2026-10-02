@@ -2,7 +2,7 @@
 <resources>
     <color name="background">#0A1A1F</color>
     <color name="surface">#10262B</color>
-    <color name="primary_pink">#F28CBB</color>
+    <color name="primary_pink">#4ADE80</color>
     <color name="accent_teal">#5EEAD4</color>
     <color name="text_main">#E6F4F1</color>
 </resources>

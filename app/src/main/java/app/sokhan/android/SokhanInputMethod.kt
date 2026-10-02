@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import app.sokhan.android.stt.TextFormat
 import app.sokhan.android.stt.applyPersianHalfspace
 
 /**
@@ -39,8 +40,8 @@ class SokhanInputMethod : InputMethodService() {
             private set
         private val BG = 0xFF10262B.toInt()
         private val SURFACE = 0xFF0A1A1F.toInt()
-        private val PINK = 0xFFF28CBB.toInt()
-        private val ON_PINK = 0xFF0A1A1F.toInt()
+        private val PINK = 0xFF4ADE80.toInt()      // primary accent: green
+        private val ON_PINK = 0xFF06251F.toInt()   // text on the green accent
         private val TEXT = 0xFFE6F4F1.toInt()
         private val TEXT_DIM = 0xFF8FB3AE.toInt()
         private val TEAL = 0xFF5EEAD4.toInt()
@@ -83,13 +84,18 @@ class SokhanInputMethod : InputMethodService() {
         super.onDestroy()
     }
 
-    /** The desktop applies the Persian half-space before pasting; live typing uses the same pass. */
-    fun transformForCommit(text: String): String =
-        if (SessionManager.faHalfspace && SessionManager.language.startsWith("fa")) {
-            applyPersianHalfspace(text)
-        } else {
-            text
-        }
+    /**
+     * Standard voice-keyboard post-processing on every commit: sentence caps,
+     * punctuation spacing, spoken punctuation, then the Persian half-space when
+     * the content (or the chosen language) is Persian.
+     */
+    fun transformForCommit(text: String): String {
+        var s = TextFormat.format(text)
+        if (SessionManager.faHalfspace && (SessionManager.language.startsWith("fa") ||
+                SessionManager.language == "auto" && s.any { it in '\u0600'..'\u06FF' })
+        ) s = applyPersianHalfspace(s)
+        return s
+    }
 
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density

@@ -137,7 +137,10 @@ class SdaSession(
         val pair = pairKey()
         val common = "key=$SPEECH_API_KEY&pair=$pair&output=pb"
         val downUrl = "$BASE_URL/down?$common"
-        val upUrl = "$BASE_URL/up?$common&lang=${urlencoding(language)}" +
+        // "auto" means let the server detect the language: omit the lang hint
+        // entirely (Chrome's voice typing does the same).
+        val langParam = if (language == "auto") "" else "&lang=${urlencoding(language)}"
+        val upUrl = "$BASE_URL/up?$common$langParam" +
             "&pFilter=0&maxAlternatives=1&app=chromium&continuous&interim"
 
         // Audio pump: encode PCM into the FLAC stream and forward the encoded

@@ -53,11 +53,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private val Background = Color(0xFF0A1A1F)
 private val Surface = Color(0xFF10262B)
-private val Pink = Color(0xFFF28CBB)
+private val Pink = Color(0xFF4ADE80) // primary accent: green (v1 legacy palette)
 private val Teal = Color(0xFF5EEAD4)
 private val TextMain = Color(0xFFE6F4F1)
 private val TextDim = Color(0xFF8FB3AE)
-private val OnPink = Color(0xFF1A0E14) // text/icon on Pink
+private val OnPink = Color(0xFF06251F) // text/icon on the green accent
 private val OnTeal = Color(0xFF06251F) // text/thumb on Teal
 
 class MainActivity : ComponentActivity() {
@@ -210,6 +210,7 @@ private fun LanguageCard() {
     var current by remember { mutableStateOf(SessionManager.language) }
     var halfspace by remember { mutableStateOf(SessionManager.faHalfspace) }
     val options = listOf(
+        "auto" to "خودکار",
         "fa-IR" to "فارسی",
         "en-US" to "English",
         "ar-SA" to "العربية",

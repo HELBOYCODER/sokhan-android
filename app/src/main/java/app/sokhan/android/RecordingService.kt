@@ -16,6 +16,7 @@ import android.widget.Toast
 import app.sokhan.android.stt.Engine
 import app.sokhan.android.stt.FLAC_SAMPLE_RATE
 import app.sokhan.android.stt.SdaSession
+import app.sokhan.android.stt.TextFormat
 import app.sokhan.android.stt.applyPersianHalfspace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -217,8 +218,13 @@ class RecordingService : Service() {
         val raw = finalizeText(session.finish(), chunks, total, language)
         liveSession = null
         captions?.cancel()
-        val text = if (raw != null && SessionManager.faHalfspace && language.startsWith("fa"))
-            applyPersianHalfspace(raw) else raw
+        var text: String? = raw?.let { TextFormat.format(it) }
+        // The Persian half-space pass runs last: it needs the final words, not
+        // the formatted spacing. In auto mode it applies when Persian is detected.
+        if (text != null && SessionManager.faHalfspace &&
+            (language.startsWith("fa") ||
+                language == "auto" && text!!.any { it in '\u0600'..'\u06FF' })
+        ) text = applyPersianHalfspace(text!!)
 
         if (text.isNullOrBlank()) {
             showToast(getString(R.string.empty_result))
