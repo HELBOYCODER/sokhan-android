@@ -240,26 +240,32 @@ class RecordingService : Service() {
     private fun insertFinal(text: String) {
         if (LiveTyper.isFullyTyped(text)) return
         if (LiveTyper.finish(text) == text) return
+        // Route 1 (preferred, no special permissions): the IME input connection.
+        // Works whenever Sokhan is the active keyboard — accessibility plays no
+        // role here.
         val ime = SokhanInputMethod.instance
         val imeReady = ime != null && ime.imeReady
-        val pasteOk = !imeReady &&
-            (SokhanAccessibilityService.instance?.hasPasteTarget() ?: false)
+        if (imeReady && ime!!.pasteViaConnection(text)) return
+        // Route 2 (optional fallback, needs the user-opted-in service): paste via
+        // the accessibility service, e.g. dictating from the overlay into an app
+        // that has no Sokhan editor connection. When it is not enabled we fall
+        // through to the clipboard — the transcript is never lost.
+        val pasteOk = SokhanAccessibilityService.instance?.hasPasteTarget() ?: false
         val routed = InsertPlanner.route(
             fullyTypedLive = false, imeConnected = imeReady, pasteTargetFound = pasteOk
         )
         val inserted = when (routed) {
-            InsertRoute.ImeConnection -> ime!!.pasteViaConnection(text)
             InsertRoute.AccessibilityPaste ->
                 SokhanAccessibilityService.instance?.insertText(text) == true
             else -> false
         }
-        if (!inserted) notifyNotInserted()
-    }
-
-    /** insertText already leaves the transcript on the clipboard; guarantee it anyway. */
-    private fun notifyNotInserted() {
-        val copied = SokhanAccessibilityService.instance != null
-        showToast(getString(if (copied) R.string.insert_failed else R.string.no_field))
+        if (!inserted) {
+            // Last resort: leave the transcript on the clipboard and tell the user.
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("sokhan", text))
+            val copied = SokhanAccessibilityService.instance != null
+            showToast(getString(if (copied) R.string.insert_failed else R.string.no_field))
+        }
     }
 
     /** Convert one block to f32, publish its spectrum, and push it to the live session. */

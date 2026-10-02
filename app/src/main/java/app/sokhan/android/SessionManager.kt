@@ -116,7 +116,14 @@ object SessionManager {
             toast(context, R.string.mic_needed)
             return
         }
-        if (SokhanAccessibilityService.instance == null) {
+        // Accessibility is only ONE of the two insertion routes and never a
+        // prerequisite. When Sokhan is the active keyboard, typing happens
+        // entirely through the InputConnection (LiveTyper) — a standard IME
+        // capability that needs no special access. Only fall back to the
+        // accessibility-paste requirement when there is no editor connection
+        // (i.e. dictating from the floating overlay into a foreign app).
+        val imeTypingAvailable = SokhanInputMethod.instance?.imeReady == true
+        if (!imeTypingAvailable && SokhanAccessibilityService.instance == null) {
             toast(context, R.string.no_service)
             return
         }
