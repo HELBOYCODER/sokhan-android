@@ -233,7 +233,11 @@ class RecordingService : Service() {
             insertFinal(text)
             SessionManager.finishWith(text)
         }
-        stopSelf()
+        // Delay stopSelf a beat: tearing the FGS down in the same frame as the
+        // last commit bounced the IME window (the keyboard visibly dropped and
+        // re-rose after tapping stop). Letting the window settle first keeps it
+        // pinned while the transcript lands.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ stopSelf() }, 400)
     }
 
     /**

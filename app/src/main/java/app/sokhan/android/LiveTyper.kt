@@ -85,10 +85,22 @@ object LiveTyper {
             return
         }
 
-        // The engine appends finals, so the previous text is normally a prefix.
-        if (!text.committed.startsWith(typed)) return
-        val delta = text.committed.substring(typed.length)
-        if (delta.isNotEmpty() && !commit(ic, transform(delta))) return
+        if (text.committed.startsWith(typed)) {
+            // Normal append: finals grew, type only the new tail.
+            val delta = text.committed.substring(typed.length)
+            if (delta.isNotEmpty() && !commit(ic, transform(delta))) return
+        } else {
+            // The server re-wrote an earlier part of the transcript (typical
+            // near the tail while speech continues). The old approach silently
+            // dropped the correction ("types fast then corrects itself"); now
+            // the stale tail is rolled back from the editor before re-typing,
+            // so the field always matches what the engine says.
+            val common = commonPrefixLength(typed, text.committed)
+            val rollback = typed.length - common
+            if (rollback > 0 && !ic.deleteSurroundingText(rollback, 0)) return
+            val delta = text.committed.substring(common)
+            if (delta.isNotEmpty() && !commit(ic, transform(delta))) return
+        }
         typed = text.committed
         lastTentative = ""
         if (text.tentative.isEmpty()) {
@@ -100,26 +112,32 @@ object LiveTyper {
         }
     }
 
+    private fun commonPrefixLength(a: String, b: String): Int {
+        val n = minOf(a.length, b.length)
+        var i = 0
+        while (i < n && a[i] == b[i]) i++
+        return i
+    }
+
     private fun finishOnMain(finalCommitted: String): String? {
         val ic = SokhanInputMethod.instance?.currentInputConnection
         if (ic == null) return if (typed.isEmpty()) null else typed
 
-        val target = if (finalCommitted.length >= typed.length && finalCommitted.startsWith(typed)) {
-            finalCommitted
-        } else {
-            typed // the final pass reflowed the text; live typing cannot patch it
-        }
+        // The final pass may reflow the text: roll back whatever we typed and
+        // re-type the final version, the same way the live path corrects.
+        val common = commonPrefixLength(typed, finalCommitted)
+        val rollback = typed.length - common
+        if (rollback > 0 && !ic.deleteSurroundingText(rollback, 0)) return typed
         val transform = { s: String -> SokhanInputMethod.instance?.transformForCommit(s) ?: s }
-        val delta = target.substring(typed.length)
+        val delta = finalCommitted.substring(common)
         if (delta.isNotEmpty()) {
             if (!commit(ic, transform(delta))) return typed
-            lastTentative = ""
         } else if (lastTentative.isNotEmpty()) {
             ic.finishComposingText()
-            lastTentative = ""
         }
-        typed = target
-        return target
+        lastTentative = ""
+        typed = finalCommitted
+        return finalCommitted
     }
 
     private fun commit(ic: InputConnection, text: String): Boolean = try {
