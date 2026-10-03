@@ -17,6 +17,7 @@ import app.sokhan.android.stt.Engine
 import app.sokhan.android.stt.FLAC_SAMPLE_RATE
 import app.sokhan.android.stt.SdaSession
 import app.sokhan.android.stt.TextFormat
+import app.sokhan.android.stt.Translator
 import app.sokhan.android.stt.applyPersianHalfspace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -225,6 +226,14 @@ class RecordingService : Service() {
             (language.startsWith("fa") ||
                 language == "auto" && text!!.any { it in '\u0600'..'\u06FF' })
         ) text = applyPersianHalfspace(text!!)
+
+        // Live translation (EN ⇄ toggle): translate AFTER formatting/half-space
+        // so the translator sees clean text, and the typed output is English.
+        // Translator falls back to the original on any failure — the transcript
+        // is never lost to a network hiccup on the translate hop.
+        if (text != null && SessionManager.translateToEn && text!!.isNotBlank()) {
+            text = Translator.translate(text!!, targetLang = "en")
+        }
 
         if (text.isNullOrBlank()) {
             showToast(getString(R.string.empty_result))

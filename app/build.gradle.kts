@@ -12,8 +12,8 @@ android {
         applicationId = "app.sokhan.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.6.0"
+        versionCode = 16
+        versionName = "1.6.1"
     }
 
     signingConfigs {
@@ -64,5 +64,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
+    // Unit tests run on the JVM where android.jar's org.json is a stub that
+    // throws; the real implementation makes Translator's JSON tests meaningful.
+    testImplementation("org.json:json:20240303")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -170,23 +170,74 @@ private fun SokhanCard(title: String, content: @Composable () -> Unit) {
 private fun ImeCard() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var enabled by remember { mutableStateOf(isImeEnabled(context)) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { enabled = isImeEnabled(context) }
+    var current by remember { mutableStateOf(isImeCurrent(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        enabled = isImeEnabled(context)
+        current = isImeCurrent(context)
+    }
     SokhanCard("صفحه‌کلید سخن (تایپ زنده)") {
         Text(
-            if (enabled) "صفحه‌کلید افزوده شده — آن را انتخاب کنید تا متن همان لحظه تایپ شود"
-            else "برای تایپ لحظه‌ای مثل Google Keyboard، «سخن» را از فهرست صفحه‌کلیدها فعال کنید",
-            color = if (enabled) Teal else TextMain, fontSize = 14.sp
+            when {
+                current -> "✓ سخن صفحه‌کلید فعال شماست — متن همان لحظه تایپ می‌شود"
+                enabled -> "صفحه‌کلید افزوده شده اما انتخاب نشده — با دکمهٔ زیر یک‌ضرب به سخن سوییچ کنید"
+                else -> "برای تایپ لحظه‌ای مثل Google Keyboard، «سخن» را از فهرست صفحه‌کلیدها فعال کنید"
+            },
+            color = when {
+                current -> Teal
+                enabled -> TextMain
+                else -> TextMain
+            },
+            fontSize = 14.sp
         )
         Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = {
-                context.startActivity(
-                    android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
-                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = OnPink)
-        ) { Text("تنظیمات صفحه‌کلید") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!enabled) {
+                Button(
+                    onClick = {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Pink, contentColor = OnPink)
+                ) { Text("فعال‌سازی در تنظیمات") }
+            }
+            if (enabled && !current) {
+                // The missing one-tap switch: opens the system IME picker where
+                // choosing «سخن» makes it the current keyboard everywhere. This
+                // is the same picker the keyboard's own switch key uses — no
+                // manual digging through system settings anymore.
+                Button(
+                    onClick = {
+                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE)
+                            as android.view.inputmethod.InputMethodManager
+                        try {
+                            // showInputMethodPicker is public since API 28.
+                            imm.showInputMethodPicker()
+                        } catch (_: Exception) {
+                            context.startActivity(
+                                android.content.Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
+                                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Teal, contentColor = OnTeal)
+                ) { Text("سوییچ به سخن") }
+            }
+        }
+    }
+}
+
+private fun isImeCurrent(context: Context): Boolean {
+    // Settings.Secure "default_input_method" is readable without a special
+    // permission (unlike "enabled_input_methods", which throws on 34+).
+    return try {
+        val def = android.provider.Settings.Secure.getString(
+            context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
+        ) ?: return false
+        def.startsWith(context.packageName)
+    } catch (_: Exception) {
+        false
     }
 }
 

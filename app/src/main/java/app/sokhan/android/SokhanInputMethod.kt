@@ -509,34 +509,37 @@ class SokhanInputMethod : InputMethodService() {
     }
 
     /**
-     * Status-line state changes animate the line's height: it dips slightly
-     * with the outgoing text, then eases back up with the new text — a quiet
-     * "something changed" motion instead of an instant swap. Text-only changes
-     * (same measured height) just swap the string; the fade avoids a jarring
-     * jump.
+     * Status-line state changes cross-fade the text instead of animating the
+     * line's height. The height animation was the second source of the reported
+     * "keyboard keeps moving": forcing an explicit height on a WRAP_CONTENT
+     * TextView made the whole strip re-measure every state change. A short
+     * alpha fade reads as "status changed" while leaving geometry untouched.
      */
     private fun animateStatusText(newText: String) {
         val line = statusLine ?: return
         if (line.text.toString() == newText) return
         statusAnim?.cancel()
-        val startH = line.height.takeIf { it > 0 } ?: line.layoutParams.height
-        line.text = newText
-        line.measure(
-            View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED
-        )
-        val targetH = maxOf(line.measuredHeight, 1)
-        statusAnim = ValueAnimator.ofInt(startH, targetH).apply {
-            duration = 180
-            addUpdateListener {
-                line.layoutParams.height = it.animatedValue as Int
-                line.requestLayout()
-            }
+        statusAnim = ValueAnimator.ofFloat(1f, 0f).apply {
+            duration = 90
+            addUpdateListener { line.alpha = it.animatedValue as Float }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    line.text = newText
+                    ValueAnimator.ofFloat(0f, 1f).apply {
+                        duration = 140
+                        addUpdateListener { line.alpha = it.animatedValue as Float }
+                        start()
+                    }
+                }
+            })
             start()
         }
     }
 
     private fun refreshButton() {
         val button = micButton ?: return
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
         val (label, status, animate) = when (SessionManager.state.value) {
             SessionManager.State.Idle -> Triple(R.string.ime_listen, R.string.ime_status_idle, false)
             SessionManager.State.Recording -> Triple(R.string.ime_stop, R.string.ime_status_recording, true)
@@ -550,35 +553,45 @@ class SokhanInputMethod : InputMethodService() {
         glowAnim?.cancel()
         glowAnim = if (recording) {
             glow?.visibility = View.VISIBLE
-            ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 250
-                addUpdateListener { glow?.alpha = 0.55f + 0.45f * (it.animatedValue as Float) }
+            // Breathe continuously (0.35 → 0.85 → 0.35) while the mic is live:
+            // a calm "listening" pulse that never changes the layout.
+            ValueAnimator.ofFloat(0.35f, 0.85f, 0.35f).apply {
+                duration = 1600
+                repeatMode = ValueAnimator.RESTART
+                repeatCount = ValueAnimator.INFINITE
+                addUpdateListener { glow?.alpha = it.animatedValue as Float }
                 start()
             }
         } else {
             ValueAnimator.ofFloat(glow?.alpha ?: 0f, 0f).apply {
-                duration = 250
+                duration = 220
                 addUpdateListener {
                     glow?.alpha = it.animatedValue as Float
-                    if ((it.animatedValue as Float) == 0f) glow?.visibility = View.GONE
+                    if ((it.animatedValue as Float) <= 0.02f) glow?.visibility = View.GONE
                 }
                 start()
             }
         }
-        // A gentle pulse on the dictation key while the mic is live makes the
-        // recording state readable at a glance.
+        // Recording-state emphasis WITHOUT layout movement: the earlier design
+        // pulsed the dictation key's scale (1.0 → 0.82). Because the key sits
+        // inside the row, every pulse frame changed the measured bounds and the
+        // whole strip (status line included) visibly shifted up/down — the
+        // reported "keyboard is not stable". Now recording only tints the key
+        // toward the pressed tone and drives the glow; geometry never changes.
         pulse?.cancel()
-        pulse = if (animate) ValueAnimator.ofFloat(1f, 0.82f, 1f).apply {
-            duration = 1200
-            repeatMode = ValueAnimator.RESTART
-            repeatCount = ValueAnimator.INFINITE
-            addUpdateListener {
-                button.scaleX = it.animatedValue as Float
-                button.scaleY = it.animatedValue as Float
+        pulse = if (animate) {
+            button.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(RADIUS_DP).toFloat()
+                setColor(0xFF2E5A46.toInt()) // deep-green "mic live" tint, fixed size
             }
-            start()
+            null
         } else {
-            button.scaleX = 1f; button.scaleY = 1f
+            button.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(RADIUS_DP).toFloat()
+                setColor(PINK)
+            }
             null
         }
     }
