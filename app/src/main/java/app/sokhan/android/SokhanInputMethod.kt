@@ -38,20 +38,32 @@ class SokhanInputMethod : InputMethodService() {
     companion object {
         @Volatile var instance: SokhanInputMethod? = null
             private set
-        private val BG = 0xFF10262B.toInt()
-        private val SURFACE = 0xFF0A1A1F.toInt()
+        private val BG = 0xFF0E181D.toInt()        // deepest layer: window behind keys
+        private val SURFACE = 0xFF1A2B31.toInt()   // key surface (tonal layer 1)
+        private val SURFACE_HI = 0xFF253A42.toInt()// pressed tonal layer (layer 2)
         private val PINK = 0xFF4ADE80.toInt()      // primary accent: green
         private val ON_PINK = 0xFF06251F.toInt()   // text on the green accent
         private val TEXT = 0xFFE6F4F1.toInt()
         private val TEXT_DIM = 0xFF8FB3AE.toInt()
         private val TEAL = 0xFF5EEAD4.toInt()
-        private const val KEY_DP = 52
+        private const val KEY_DP = 58
+        // Pressed-state look: no ripple (system ripples look cheap on a flat
+        // dark theme), just a slight shrink + tint, like premium keyboards.
+        private const val PRESS_SCALE = 0.97f
+        private val PRESS_TINT = 0xFF1E3A40.toInt()
+        // Minimum on-screen width a key may shrink to; below this the Hide key
+        // collapses to an icon so the rest of the row stays comfortably wide.
+        private const val MIN_KEY_DP = 64
+        private const val RADIUS_DP = 12
     }
 
     private var micButton: Button? = null
     private var translateKey: Button? = null
     private var statusLine: TextView? = null
     private var pulse: ValueAnimator? = null
+    private var statusAnim: ValueAnimator? = null
+    private var glow: View? = null
+    private var glowAnim: ValueAnimator? = null
 
     /** True while the editor connection exists, i.e. there is somewhere to type. */
     val imeReady: Boolean get() = currentInputConnection != null
@@ -81,6 +93,8 @@ class SokhanInputMethod : InputMethodService() {
 
     override fun onDestroy() {
         pulse?.cancel()
+        statusAnim?.cancel()
+        glowAnim?.cancel()
         instance = null
         super.onDestroy()
     }
@@ -178,12 +192,15 @@ class SokhanInputMethod : InputMethodService() {
         }
 
         // Status line: shows what dictation is doing, so the strip never looks
-        // like three orphan buttons floating over the editor.
+        // like three orphan buttons floating over the editor. Smaller, letter-
+        // spaced, dim — clearly secondary to the key labels (typography
+        // hierarchy: status whispers, keys speak).
         statusLine = TextView(this).apply {
             setTextColor(TEXT_DIM)
-            textSize = 13f
+            textSize = 12f
+            letterSpacing = 0.04f
             gravity = Gravity.CENTER
-            setPadding(dp(16), dp(10), dp(16), dp(2))
+            setPadding(dp(16), dp(12), dp(16), dp(4))
         }
         column.addView(
             statusLine,
@@ -195,7 +212,9 @@ class SokhanInputMethod : InputMethodService() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(4), dp(8), dp(8))
+            // 8dp grid: 4dp row padding + 4dp key margin = 8dp edge inset,
+            // 4dp margin + 4dp margin = 8dp gap between keys.
+            setPadding(dp(4), dp(8), dp(4), dp(8))
         }
         column.addView(
             row,
@@ -204,27 +223,82 @@ class SokhanInputMethod : InputMethodService() {
             )
         )
 
-        // ── Edit row: space / backspace / enter ─────────────────────────────
-        // The user must be able to grow and shrink the dictated text live —
-        // basic keyboard UX, applied directly to the focused field.
+        // Responsive width floor: at 720px (~3.5x density on some slabs, 2x on
+        // phones) five weighted keys can each end up under 64dp. Measure what
+        // the four secondary keys would get; below the floor, the Hide key —
+        // the least content-heavy — collapses to a chevron icon so the others
+        // keep comfortable targets. Behavior is untouched: same tap action.
+        val screenPx = resources.displayMetrics.widthPixels
+        val minKeyPx = dp(MIN_KEY_DP)
+        // 8dp gutters + 7 key margins of 8dp each eat width before the keys.
+        val availablePx = screenPx - dp(8) * 2 - dp(4) * 2 * 5
+        // Weights: Listen 2 + switch 1 + translate 1 + hide 1 = 5 parts.
+        val hideShare = availablePx / 5
+        val narrow = hideShare < minKeyPx
+
+        // ── Shared key styling ───────────────────────────────────────────────
+        // Tonal elevation instead of strokes: keys sit one tonal step above the
+        // window background; pressed keys lift one more step and shrink a hair.
+        // No strokes, no elevation shadows — identical on every OEM skin.
+        fun keyBg(color: Int): GradientDrawable = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(RADIUS_DP).toFloat()
+            setColor(color)
+        }
+
+        /** Short scale/color press animation driven by a tiny ValueAnimator. */
+        fun attachPressAnim(b: Button, restBg: () -> GradientDrawable) {
+            var anim: ValueAnimator? = null
+            b.setOnTouchListener { v, ev ->
+                when (ev.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        anim?.cancel()
+                        anim = ValueAnimator.ofFloat(0f, 1f).apply {
+                            duration = 80
+                            addUpdateListener {
+                                val t = it.animatedValue as Float
+                                b.scaleX = 1f - 0.04f * t
+                                b.scaleY = 1f - 0.04f * t
+                            }
+                            start()
+                        }
+                        b.background = keyBg(SURFACE_HI)
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        anim?.cancel()
+                        anim = ValueAnimator.ofFloat(0f, 1f).apply {
+                            duration = 120
+                            addUpdateListener {
+                                val t = it.animatedValue as Float
+                                b.scaleX = 0.96f + 0.04f * t
+                                b.scaleY = 0.96f + 0.04f * t
+                            }
+                            start()
+                        }
+                        b.background = restBg()
+                        if (ev.actionMasked == android.view.MotionEvent.ACTION_UP) v.performClick()
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
+
         fun keyText(label: String): Button = Button(this).apply {
             text = label
             isAllCaps = false
-            textSize = 15f
+            textSize = 14f
             stateListAnimator = null
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(14).toFloat()
-                setColor(SURFACE)
-                setStroke(dp(1), TEXT_DIM)
-            }
+            background = keyBg(SURFACE)
             setTextColor(TEXT)
+            attachPressAnim(this) { keyBg(SURFACE) }
         }
 
         val editRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), 0, dp(8), dp(4))
+            setPadding(dp(4), 0, dp(4), dp(8))
         }
         column.addView(
             editRow,
@@ -301,27 +375,19 @@ class SokhanInputMethod : InputMethodService() {
         fun key(label: Int): Button = Button(this).apply {
             text = context.getString(label)
             isAllCaps = false
-            textSize = 15f
+            textSize = 14f
             stateListAnimator = null
-            // Own shape instead of the system default button: flat pill, no
-            // elevation, same on every OEM skin.
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(14).toFloat()
-                setColor(SURFACE)
-                setStroke(dp(1), TEXT_DIM)
-            }
+            // Tonal layer instead of the system default button: flat, no
+            // stroke, no elevation — same on every OEM skin.
+            background = keyBg(SURFACE)
             setTextColor(TEXT)
+            attachPressAnim(this) { keyBg(SURFACE) }
         }
 
         // One wide dictation key: this keyboard exists to start and stop speech,
         // it is not meant to replace the user's own layout for manual typing.
         val button = key(R.string.ime_listen).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(14).toFloat()
-                setColor(PINK)
-            }
+            background = keyBg(PINK)
             setTextColor(ON_PINK)
             setOnClickListener {
                 SessionManager.toggle(this@SokhanInputMethod)
@@ -329,8 +395,35 @@ class SokhanInputMethod : InputMethodService() {
             }
         }
         micButton = button
-        row.addView(
+        // Accent glow behind the Listen key while recording: a soft green disc
+        // layered behind the button (alpha-pulsed in refreshButton), giving a
+        // "mic is live" halo with no elevation/shadow APIs — pure drawables.
+        // A container lets the glow overlap the button without consuming row
+        // width; clipChildren=false lets it bleed past the key's bounds.
+        row.clipChildren = false
+        row.clipToPadding = false
+        val micContainer = FrameLayout(this)
+        val glowView = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x594ADE80) // ~35% alpha green
+            }
+        }
+        micContainer.addView(
+            glowView,
+            FrameLayout.LayoutParams(dp(88), dp(88), Gravity.CENTER)
+        )
+        glowView.alpha = 0f
+        glow = glowView
+        micContainer.addView(
             button,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+        )
+        row.addView(
+            micContainer,
             LinearLayout.LayoutParams(0, dp(KEY_DP), 2f).apply {
                 setMargins(dp(4), 0, dp(4), 0)
             }
@@ -386,6 +479,12 @@ class SokhanInputMethod : InputMethodService() {
 
         val hideKey = key(R.string.ime_hide).apply {
             setOnClickListener { requestHideSelf(0) }
+            // Narrow screens: swap the label for a compact chevron so the key
+            // stays tappable without stealing width from the primary keys.
+            if (narrow) {
+                text = "⌄"
+                textSize = 18f
+            }
         }
         row.addView(
             hideKey,
@@ -397,16 +496,43 @@ class SokhanInputMethod : InputMethodService() {
         return root
     }
 
-    /** Armed = solid green (active state must be readable at a glance). */
+    /** Armed = thin accent ring on the surface fill; text turns accent. */
     private fun styleTranslateKey(b: Button, on: Boolean) {
         val density = resources.displayMetrics.density
         b.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = (14 * density).toFloat()
-            setColor(if (on) PINK else SURFACE)
-            setStroke((1 * density).toInt(), if (on) PINK else TEXT_DIM)
+            cornerRadius = (RADIUS_DP * density).toFloat()
+            setColor(SURFACE)
+            setStroke((2 * density).toInt(), if (on) PINK else SURFACE)
         }
-        b.setTextColor(if (on) ON_PINK else TEXT)
+        b.setTextColor(if (on) PINK else TEXT)
+    }
+
+    /**
+     * Status-line state changes animate the line's height: it dips slightly
+     * with the outgoing text, then eases back up with the new text — a quiet
+     * "something changed" motion instead of an instant swap. Text-only changes
+     * (same measured height) just swap the string; the fade avoids a jarring
+     * jump.
+     */
+    private fun animateStatusText(newText: String) {
+        val line = statusLine ?: return
+        if (line.text.toString() == newText) return
+        statusAnim?.cancel()
+        val startH = line.height.takeIf { it > 0 } ?: line.layoutParams.height
+        line.text = newText
+        line.measure(
+            View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED
+        )
+        val targetH = maxOf(line.measuredHeight, 1)
+        statusAnim = ValueAnimator.ofInt(startH, targetH).apply {
+            duration = 180
+            addUpdateListener {
+                line.layoutParams.height = it.animatedValue as Int
+                line.requestLayout()
+            }
+            start()
+        }
     }
 
     private fun refreshButton() {
@@ -417,7 +543,28 @@ class SokhanInputMethod : InputMethodService() {
             SessionManager.State.Transcribing -> Triple(R.string.ime_working, R.string.ime_status_working, false)
         }
         button.text = getString(label)
-        statusLine?.text = getString(status)
+        animateStatusText(getString(status))
+        val recording = animate
+        // Glow behind the Listen key: fade in and breathe while recording,
+        // fade out otherwise.
+        glowAnim?.cancel()
+        glowAnim = if (recording) {
+            glow?.visibility = View.VISIBLE
+            ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 250
+                addUpdateListener { glow?.alpha = 0.55f + 0.45f * (it.animatedValue as Float) }
+                start()
+            }
+        } else {
+            ValueAnimator.ofFloat(glow?.alpha ?: 0f, 0f).apply {
+                duration = 250
+                addUpdateListener {
+                    glow?.alpha = it.animatedValue as Float
+                    if ((it.animatedValue as Float) == 0f) glow?.visibility = View.GONE
+                }
+                start()
+            }
+        }
         // A gentle pulse on the dictation key while the mic is live makes the
         // recording state readable at a glance.
         pulse?.cancel()
