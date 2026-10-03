@@ -232,7 +232,9 @@ class RecordingService : Service() {
         // Translator falls back to the original on any failure — the transcript
         // is never lost to a network hiccup on the translate hop.
         if (text != null && SessionManager.translateToEn && text!!.isNotBlank()) {
-            text = Translator.translate(text!!, targetLang = "en")
+            text = Translator.translate(
+                text!!, targetLang = "en", apiKey = SessionManager.geminiApiKey
+            )
         }
 
         if (text.isNullOrBlank()) {

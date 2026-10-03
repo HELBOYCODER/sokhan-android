@@ -289,6 +289,57 @@ private fun LanguageCard() {
                 )
             }
         }
+        // Live translation (EN ⇄ on the keyboard): toggle + Gemini API key.
+        // With a key, translation runs through Gemini (reliable everywhere);
+        // without one, the public gtx web endpoint is used best-effort.
+        var translateOn by remember { mutableStateOf(SessionManager.translateToEn) }
+        var geminiKey by remember { mutableStateOf(SessionManager.geminiApiKey) }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("ترجمهٔ زنده به انگلیسی", color = TextMain, fontSize = 14.sp)
+            Switch(
+                checked = translateOn,
+                onCheckedChange = {
+                    translateOn = it
+                    SessionManager.setTranslateToEn(context, it)
+                },
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = Teal,
+                    checkedThumbColor = OnTeal
+                )
+            )
+        }
+        if (translateOn) {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.OutlinedTextField(
+                value = geminiKey,
+                onValueChange = {
+                    geminiKey = it
+                    SessionManager.setGeminiApiKey(context, it)
+                },
+                label = { Text("کلید API جِمینای (اختیاری — برای ترجمهٔ پایدار)", fontSize = 12.sp) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = TextMain, fontSize = 13.sp
+                ),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Teal,
+                    unfocusedBorderColor = TextDim,
+                    cursorColor = Teal,
+                    focusedLabelColor = Teal,
+                    unfocusedLabelColor = TextDim
+                )
+            )
+            Text(
+                "بدون کلید از سرویس عمومی گوگل استفاده می‌شود که روی بعضی شبکه‌ها مسدود است.",
+                color = TextDim, fontSize = 11.sp
+            )
+        }
         // Half-space (ZWNJ) post-processing only affects Persian output.
         if (current.startsWith("fa")) {
             Spacer(Modifier.height(12.dp))

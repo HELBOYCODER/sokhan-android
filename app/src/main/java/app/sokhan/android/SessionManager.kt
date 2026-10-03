@@ -18,6 +18,7 @@ object SessionManager {
     private const val KEY_LANGUAGE = "language"
     private const val KEY_HALFSPACE = "fa_halfspace"
     private const val KEY_TRANSLATE = "translate_to_en"
+    private const val KEY_GEMINI_KEY = "gemini_api_key"
     private const val DEFAULT_LANGUAGE = "fa-IR"
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -48,6 +49,10 @@ object SessionManager {
     var language: String = DEFAULT_LANGUAGE
     var translateToEn: Boolean = false
 
+    /** Gemini API key — when set, translation goes through Gemini (reliable); otherwise the gtx web endpoint. */
+    var geminiApiKey: String = ""
+
+
     /** Mirrors the desktop's fa_halfspace_enabled, on by default. */
     var faHalfspace: Boolean = true
 
@@ -56,6 +61,7 @@ object SessionManager {
         language = p.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
         faHalfspace = p.getBoolean(KEY_HALFSPACE, true)
         translateToEn = p.getBoolean(KEY_TRANSLATE, false)
+        geminiApiKey = p.getString(KEY_GEMINI_KEY, "") ?: ""
     }
 
     fun setLanguage(context: Context, value: String) {
@@ -71,6 +77,11 @@ object SessionManager {
     fun setTranslateToEn(context: Context, value: Boolean) {
         translateToEn = value
         prefs(context).edit().putBoolean(KEY_TRANSLATE, value).apply()
+    }
+
+    fun setGeminiApiKey(context: Context, value: String) {
+        geminiApiKey = value.trim()
+        prefs(context).edit().putString(KEY_GEMINI_KEY, geminiApiKey).apply()
     }
 
     private fun prefs(context: Context) =
